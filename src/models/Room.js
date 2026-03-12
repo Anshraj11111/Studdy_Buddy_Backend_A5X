@@ -1,0 +1,44 @@
+import mongoose from 'mongoose';
+
+const roomSchema = new mongoose.Schema(
+  {
+    student1: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+    },
+    student2: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+    },
+    doubt1: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Doubt',
+      required: true,
+    },
+    doubt2: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Doubt',
+      required: true,
+    },
+    topic: {
+      type: String,
+      required: true,
+      index: true,
+    },
+    status: {
+      type: String,
+      enum: ['active', 'completed', 'abandoned'],
+      default: 'active',
+      index: true,
+    },
+  },
+  { timestamps: true }
+);
+
+// Index for efficient room lookup by students
+roomSchema.index({ student1: 1, student2: 1 });
+roomSchema.index({ createdAt: -1 });
+
+export default mongoose.model('Room', roomSchema);

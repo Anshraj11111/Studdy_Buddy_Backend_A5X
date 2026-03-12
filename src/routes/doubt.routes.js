@@ -1,0 +1,19 @@
+import express from 'express';
+import doubtController from '../controllers/doubt.controller.js';
+import { authenticate } from '../middleware/auth.middleware.js';
+
+const router = express.Router();
+
+// Public routes
+router.get('/', doubtController.getDoubts);
+router.get('/search', doubtController.searchDoubts);
+router.get('/topic/:topic', doubtController.getDoubtsByTopic);
+router.get('/:id', doubtController.getDoubtById);
+
+// Protected routes
+router.post('/', authenticate, doubtController.createDoubt);
+router.post('/:id/find-match', authenticate, doubtController.findMatch);
+router.put('/:id', authenticate, doubtController.updateDoubt);
+router.delete('/:id', authenticate, doubtController.deleteDoubt);
+
+export default router;
