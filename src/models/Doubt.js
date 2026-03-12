@@ -36,6 +36,24 @@ const doubtSchema = new mongoose.Schema(
       enum: ['open', 'matched', 'resolved'],
       default: 'open',
     },
+    replies: [
+      {
+        user: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'User',
+          required: true,
+        },
+        content: {
+          type: String,
+          required: true,
+          trim: true,
+        },
+        createdAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
   },
   {
     timestamps: true,

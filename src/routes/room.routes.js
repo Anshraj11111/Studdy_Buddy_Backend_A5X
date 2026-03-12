@@ -11,7 +11,9 @@ const router = express.Router();
  */
 router.get('/', authenticate, async (req, res) => {
   try {
+    console.log('Fetching rooms for user:', req.user._id);
     const rooms = await matchService.getRoomsByUser(req.user._id);
+    console.log('Found rooms:', rooms.length);
     
     res.status(200).json({
       success: true,
@@ -26,6 +28,7 @@ router.get('/', authenticate, async (req, res) => {
       error: {
         message: 'Failed to fetch rooms',
         code: 'SERVER_ERROR',
+        details: error.message,
       },
     });
   }

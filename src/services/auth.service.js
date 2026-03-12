@@ -10,7 +10,7 @@ class AuthService {
    */
   async register(userData) {
     try {
-      const { name, email, password, role, skills } = userData;
+      const { name, email, password, role, skills, mentorCode } = userData;
 
       // Check if user already exists
       const existingUser = await User.findOne({ email });
@@ -28,6 +28,7 @@ class AuthService {
         password: hashedPassword,
         role: role || 'student',
         skills: skills || [],
+        mentorCode: mentorCode || null,
       });
 
       return user;

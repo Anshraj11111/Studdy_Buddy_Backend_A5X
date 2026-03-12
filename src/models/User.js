@@ -28,6 +28,10 @@ const userSchema = new mongoose.Schema(
       enum: ['student', 'mentor'],
       default: 'student',
     },
+    mentorCode: {
+      type: String,
+      default: null,
+    },
     skills: {
       type: [String],
       default: [],
@@ -46,9 +50,6 @@ const userSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
-
-// Create index on email for efficient lookups
-userSchema.index({ email: 1 });
 
 // Method to exclude password from JSON responses
 userSchema.methods.toJSON = function () {

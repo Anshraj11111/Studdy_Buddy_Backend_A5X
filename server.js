@@ -2,6 +2,7 @@ import http from 'http';
 import dotenv from 'dotenv';
 import { Server } from 'socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
+import mongoose from 'mongoose';
 import app from './src/app.js';
 import connectDB from './src/config/db.js';
 import connectRedis from './src/config/redis.js';
@@ -10,6 +11,9 @@ import setupVideoSocket from './src/sockets/video.socket.js';
 import logger from './src/utils/logger.js';
 
 dotenv.config();
+
+// Suppress mongoose warnings
+mongoose.set('strictQuery', false);
 
 const PORT = process.env.PORT || 5000;
 
@@ -38,33 +42,19 @@ const startServer = async () => {
   try {
     // Connect to MongoDB
     await connectDB();
-    logger.info('✓ MongoDB connected');
 
     // Connect to Redis
     await connectRedis;
-    logger.info('✓ Redis connected');
-
-    // Setup Socket.IO Redis adapter for clustering
-    try {
-      const redisClient = (await import('./src/config/redis.js')).default;
-      if (redisClient && redisClient.status === 'ready') {
-        io.adapter(createAdapter(redisClient, redisClient.duplicate()));
-        logger.info('✓ Socket.IO Redis adapter configured');
-      }
-    } catch (error) {
-      logger.warn('Socket.IO Redis adapter not available, using default adapter', {
-        error: error.message,
-      });
-    }
+    console.log('✓ Redis Connected');
 
     // Start server
     server.listen(PORT, () => {
-      logger.info(`✓ Server running on port ${PORT}`);
-      logger.info(`✓ Socket.IO initialized`);
-      logger.info(`✓ Environment: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`✓ Server running on port ${PORT}`);
+      console.log(`✓ Environment: ${process.env.NODE_ENV || 'development'}`);
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     });
   } catch (error) {
-    logger.error('Failed to start server', { error: error.message });
+    console.error('✗ Failed to start server:', error.message);
     process.exit(1);
   }
 };
@@ -73,17 +63,17 @@ startServer();
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
-  logger.info('SIGTERM received, shutting down gracefully');
+  console.log('Shutting down gracefully...');
   server.close(() => {
-    logger.info('Server closed');
+    console.log('Server closed');
     process.exit(0);
   });
 });
 
 process.on('SIGINT', () => {
-  logger.info('SIGINT received, shutting down gracefully');
+  console.log('Shutting down gracefully...');
   server.close(() => {
-    logger.info('Server closed');
+    console.log('Server closed');
     process.exit(0);
   });
 });

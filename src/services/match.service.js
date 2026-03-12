@@ -128,10 +128,17 @@ class MatchService {
       })
         .populate('student1')
         .populate('student2')
-        .populate('doubt1')
-        .populate('doubt2')
+        .populate({
+          path: 'doubt1',
+          populate: { path: 'userId' }
+        })
+        .populate({
+          path: 'doubt2',
+          populate: { path: 'userId' }
+        })
         .sort({ createdAt: -1 });
 
+      console.log('getRoomsByUser - Found rooms:', rooms.length);
       return rooms;
     } catch (error) {
       console.error('Error getting rooms by user:', error);

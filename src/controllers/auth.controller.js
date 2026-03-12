@@ -6,7 +6,7 @@ import authService from '../services/auth.service.js';
  */
 export const register = async (req, res) => {
   try {
-    const { name, email, password, role, skills } = req.body;
+    const { name, email, password, role, skills, mentorCode } = req.body;
 
     // Input validation
     if (!name || !email || !password) {
@@ -29,6 +29,20 @@ export const register = async (req, res) => {
       });
     }
 
+    // Validate mentor code if role is mentor
+    if (role === 'mentor') {
+      const validMentorCode = process.env.MENTOR_CODE || 'MENTOR2024';
+      if (!mentorCode || mentorCode !== validMentorCode) {
+        return res.status(403).json({
+          success: false,
+          error: {
+            message: 'Invalid mentor code',
+            code: 'INVALID_MENTOR_CODE',
+          },
+        });
+      }
+    }
+
     // Register user
     const user = await authService.register({
       name,
@@ -36,6 +50,7 @@ export const register = async (req, res) => {
       password,
       role,
       skills,
+      mentorCode: role === 'mentor' ? mentorCode : null,
     });
 
     // Generate token

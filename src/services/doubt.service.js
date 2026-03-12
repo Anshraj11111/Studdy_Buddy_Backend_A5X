@@ -54,6 +54,7 @@ class DoubtService {
 
       const doubts = await Doubt.find(query)
         .populate('userId', 'name email profileImage')
+        .populate('replies.user', 'name email')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit);
@@ -97,10 +98,9 @@ class DoubtService {
    */
   async getDoubtById(doubtId) {
     try {
-      const doubt = await Doubt.findById(doubtId).populate(
-        'userId',
-        'name email profileImage skills xp'
-      );
+      const doubt = await Doubt.findById(doubtId)
+        .populate('userId', 'name email profileImage skills xp')
+        .populate('replies.user', 'name email');
 
       if (!doubt) {
         throw new Error('Doubt not found');
@@ -242,6 +242,35 @@ class DoubtService {
       if (!doubt) {
         throw new Error('Doubt not found');
       }
+
+      return doubt;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Add reply to a doubt
+   * @param {string} doubtId - Doubt ID
+   * @param {Object} replyData - Reply data (user, content)
+   * @returns {Promise<Object>} Updated doubt
+   */
+  async addReply(doubtId, replyData) {
+    try {
+      const doubt = await Doubt.findByIdAndUpdate(
+        doubtId,
+        {
+          $push: {
+            replies: {
+              user: replyData.user,
+              content: replyData.content,
+              createdAt: new Date(),
+            },
+          },
+        },
+        { new: true }
+      ).populate('userId', 'name email')
+       .populate('replies.user', 'name email');
 
       return doubt;
     } catch (error) {

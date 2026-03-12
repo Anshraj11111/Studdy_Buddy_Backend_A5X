@@ -13,6 +13,7 @@ router.get('/:id', doubtController.getDoubtById);
 // Protected routes
 router.post('/', authenticate, doubtController.createDoubt);
 router.post('/:id/find-match', authenticate, doubtController.findMatch);
+router.post('/:id/replies', authenticate, doubtController.addReply);
 router.put('/:id', authenticate, doubtController.updateDoubt);
 router.delete('/:id', authenticate, doubtController.deleteDoubt);
 

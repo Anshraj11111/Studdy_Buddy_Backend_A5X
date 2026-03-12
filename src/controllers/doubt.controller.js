@@ -441,6 +441,56 @@ export const deleteDoubt = async (req, res) => {
   }
 };
 
+/**
+ * Add reply to a doubt
+ * POST /api/doubts/:id/replies
+ */
+export const addReply = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { content } = req.body;
+
+    if (!content || !content.trim()) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: 'Reply content is required',
+          code: 'VALIDATION_ERROR',
+        },
+      });
+    }
+
+    const doubt = await doubtService.addReply(id, {
+      user: req.user._id,
+      content: content.trim(),
+    });
+
+    if (!doubt) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          message: 'Doubt not found',
+          code: 'NOT_FOUND',
+        },
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: { doubt },
+    });
+  } catch (error) {
+    console.error('Error adding reply:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Failed to add reply',
+        code: 'SERVER_ERROR',
+      },
+    });
+  }
+};
+
 export default {
   createDoubt,
   getDoubts,
@@ -450,4 +500,5 @@ export default {
   findMatch,
   updateDoubt,
   deleteDoubt,
+  addReply,
 };
