@@ -3,6 +3,39 @@ import Doubt from '../models/Doubt.js';
 
 class MatchService {
   /**
+   * Extract keywords from doubt title and description
+   * @param {Object} doubt - Doubt object
+   * @returns {Array} - Array of keywords
+   */
+  extractKeywords(doubt) {
+    const text = `${doubt.title} ${doubt.description}`.toLowerCase();
+    // Remove common words and split into keywords
+    const commonWords = ['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'is', 'are', 'was', 'were', 'how', 'what', 'why', 'when', 'where', 'i', 'my', 'me', 'can', 'could', 'should', 'would'];
+    const words = text.match(/\b\w+\b/g) || [];
+    return words.filter(word => word.length > 3 && !commonWords.includes(word));
+  }
+
+  /**
+   * Calculate keyword match score between two doubts
+   * @param {Array} keywords1 - Keywords from first doubt
+   * @param {Array} keywords2 - Keywords from second doubt
+   * @returns {number} - Number of matching keywords
+   */
+  calculateMatchScore(keywords1, keywords2) {
+    const set1 = new Set(keywords1);
+    const set2 = new Set(keywords2);
+    let matches = 0;
+    
+    for (const keyword of set1) {
+      if (set2.has(keyword)) {
+        matches++;
+      }
+    }
+    
+    return matches;
+  }
+
+  /**
    * Find a matching doubt and create a room if found
    * @param {string} doubtId - The newly created doubt ID
    * @returns {Object|null} - Room object if match found, null otherwise
@@ -22,32 +55,61 @@ class MatchService {
         status: newDoubt.status
       });
 
-      // Find an open doubt with the same topic (excluding the current doubt and current user's doubts)
-      const matchingDoubt = await Doubt.findOne({
+      // Extract keywords from new doubt
+      const newDoubtKeywords = this.extractKeywords(newDoubt);
+      console.log('New doubt keywords:', newDoubtKeywords);
+
+      // Find all open doubts with the same topic (excluding the current doubt and current user's doubts)
+      const potentialMatches = await Doubt.find({
         _id: { $ne: doubtId },
         userId: { $ne: newDoubt.userId._id }, // Exclude current user's doubts
         topic: newDoubt.topic,
         status: 'open',
       }).populate('userId');
 
-      console.log('Matching doubt found:', matchingDoubt ? {
-        doubtId: matchingDoubt._id,
-        topic: matchingDoubt.topic,
-        userId: matchingDoubt.userId._id,
-        status: matchingDoubt.status
-      } : 'No match');
+      console.log('Potential matches found:', potentialMatches.length);
 
-      if (!matchingDoubt) {
-        // No match found, return null
+      // Find best match based on keyword similarity
+      let bestMatch = null;
+      let bestScore = 0;
+
+      for (const doubt of potentialMatches) {
+        const doubtKeywords = this.extractKeywords(doubt);
+        const score = this.calculateMatchScore(newDoubtKeywords, doubtKeywords);
+        
+        console.log(`Doubt ${doubt._id} - Keywords:`, doubtKeywords, `Score: ${score}`);
+        
+        // Require at least 2 matching keywords
+        if (score >= 2 && score > bestScore) {
+          bestScore = score;
+          bestMatch = doubt;
+        }
+      }
+
+      // If no keyword match found, try exact topic match
+      if (!bestMatch && potentialMatches.length > 0) {
+        bestMatch = potentialMatches[0];
+        console.log('No keyword match found, using first topic match');
+      }
+
+      if (!bestMatch) {
+        console.log('No match found');
         return null;
       }
+
+      console.log('Best match found:', {
+        doubtId: bestMatch._id,
+        topic: bestMatch.topic,
+        userId: bestMatch.userId._id,
+        matchScore: bestScore
+      });
 
       // Create a room with both students
       const room = await this.createRoom(
         newDoubt.userId._id,
-        matchingDoubt.userId._id,
+        bestMatch.userId._id,
         newDoubt._id,
-        matchingDoubt._id,
+        bestMatch._id,
         newDoubt.topic
       );
 
@@ -55,7 +117,7 @@ class MatchService {
 
       // Update both doubts to "matched" status
       await Doubt.findByIdAndUpdate(newDoubt._id, { status: 'matched' });
-      await Doubt.findByIdAndUpdate(matchingDoubt._id, { status: 'matched' });
+      await Doubt.findByIdAndUpdate(bestMatch._id, { status: 'matched' });
 
       return room;
     } catch (error) {
