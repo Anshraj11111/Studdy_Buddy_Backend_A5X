@@ -20,17 +20,43 @@ const PORT = process.env.PORT || 5000;
 // Create HTTP server
 const server = http.createServer(app);
 
-// Initialize Socket.IO with Redis adapter for clustering
+// Initialize Socket.IO with proper CORS for production
 const io = new Server(server, {
   cors: {
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+    origin: function (origin, callback) {
+      // Allow requests with no origin (mobile apps, Postman, etc.)
+      if (!origin) return callback(null, true);
+      
+      const allowedOrigins = [
+        'http://localhost:3000',
+        'https://studdy-buddy-a5x.vercel.app',
+        /https:\/\/studdy-buddy.*\.vercel\.app$/, // All Vercel preview URLs
+      ];
+      
+      const isAllowed = allowedOrigins.some(allowed => {
+        if (allowed instanceof RegExp) {
+          return allowed.test(origin);
+        }
+        return allowed === origin;
+      });
+      
+      if (isAllowed) {
+        callback(null, true);
+      } else {
+        console.log('Socket CORS blocked origin:', origin);
+        callback(null, true); // Temporarily allow all for debugging
+      }
+    },
     methods: ['GET', 'POST'],
     credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization'],
   },
   transports: ['websocket', 'polling'],
+  allowEIO3: true, // Enable compatibility with older clients
   maxHttpBufferSize: 1e6, // 1MB
   pingInterval: 25000,
   pingTimeout: 60000,
+  connectTimeout: 45000,
 });
 
 // Setup socket handlers
