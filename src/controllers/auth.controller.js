@@ -31,7 +31,7 @@ export const register = async (req, res) => {
 
     // Validate mentor code if role is mentor
     if (role === 'mentor') {
-      const validMentorCode = process.env.MENTOR_CODE || 'MENTOR2024';
+      const validMentorCode = process.env.MENTOR_CODE || 'H5'; // Default to H5
       if (!mentorCode || mentorCode !== validMentorCode) {
         return res.status(403).json({
           success: false,
@@ -90,7 +90,7 @@ export const register = async (req, res) => {
  */
 export const login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, role, mentorCode } = req.body;
 
     // Input validation
     if (!email || !password) {
@@ -103,8 +103,33 @@ export const login = async (req, res) => {
       });
     }
 
+    // Validate mentor code if role is mentor
+    if (role === 'mentor') {
+      const validMentorCode = process.env.MENTOR_CODE || 'H5';
+      if (!mentorCode || mentorCode !== validMentorCode) {
+        return res.status(403).json({
+          success: false,
+          error: {
+            message: 'Invalid mentor code',
+            code: 'INVALID_MENTOR_CODE',
+          },
+        });
+      }
+    }
+
     // Login user
     const { user, token } = await authService.login(email, password);
+
+    // Verify role matches if provided
+    if (role && user.role !== role) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          message: `This account is registered as ${user.role}, not ${role}`,
+          code: 'ROLE_MISMATCH',
+        },
+      });
+    }
 
     res.status(200).json({
       success: true,
