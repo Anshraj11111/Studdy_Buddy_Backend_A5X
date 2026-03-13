@@ -277,6 +277,71 @@ class DoubtService {
       throw error;
     }
   }
+
+  /**
+   * Edit a reply
+   * @param {string} doubtId - Doubt ID
+   * @param {string} replyId - Reply ID
+   * @param {string} userId - User ID (for authorization)
+   * @param {string} content - New content
+   * @returns {Promise<Object>} Updated doubt
+   */
+  async editReply(doubtId, replyId, userId, content) {
+    try {
+      const doubt = await Doubt.findById(doubtId);
+      if (!doubt) return null;
+
+      const reply = doubt.replies.id(replyId);
+      if (!reply) return null;
+
+      // Check if user owns the reply
+      if (reply.user.toString() !== userId.toString()) {
+        throw new Error('Unauthorized');
+      }
+
+      reply.content = content;
+      await doubt.save();
+
+      await doubt.populate('userId', 'name email');
+      await doubt.populate('replies.user', 'name email');
+
+      return doubt;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Delete a reply
+   * @param {string} doubtId - Doubt ID
+   * @param {string} replyId - Reply ID
+   * @param {string} userId - User ID (for authorization)
+   * @returns {Promise<Object>} Updated doubt
+   */
+  async deleteReply(doubtId, replyId, userId) {
+    try {
+      const doubt = await Doubt.findById(doubtId);
+      if (!doubt) return null;
+
+      const reply = doubt.replies.id(replyId);
+      if (!reply) return null;
+
+      // Check if user owns the reply
+      if (reply.user.toString() !== userId.toString()) {
+        throw new Error('Unauthorized');
+      }
+
+      reply.remove();
+      await doubt.save();
+
+      await doubt.populate('userId', 'name email');
+      await doubt.populate('replies.user', 'name email');
+
+      return doubt;
+    } catch (error) {
+      throw error;
+    }
+  }
 }
 
 export default new DoubtService();

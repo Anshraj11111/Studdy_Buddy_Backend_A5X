@@ -491,6 +491,108 @@ export const addReply = async (req, res) => {
   }
 };
 
+/**
+ * Edit a reply
+ * PUT /api/doubts/:id/replies/:replyId
+ */
+export const editReply = async (req, res) => {
+  try {
+    const { id, replyId } = req.params;
+    const { content } = req.body;
+
+    if (!content || !content.trim()) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: 'Reply content is required',
+          code: 'VALIDATION_ERROR',
+        },
+      });
+    }
+
+    const doubt = await doubtService.editReply(id, replyId, req.user._id, content.trim());
+
+    if (!doubt) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          message: 'Doubt or reply not found',
+          code: 'NOT_FOUND',
+        },
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: { doubt },
+    });
+  } catch (error) {
+    console.error('Error editing reply:', error);
+    if (error.message === 'Unauthorized') {
+      return res.status(403).json({
+        success: false,
+        error: {
+          message: 'You can only edit your own replies',
+          code: 'FORBIDDEN',
+        },
+      });
+    }
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Failed to edit reply',
+        code: 'SERVER_ERROR',
+      },
+    });
+  }
+};
+
+/**
+ * Delete a reply
+ * DELETE /api/doubts/:id/replies/:replyId
+ */
+export const deleteReply = async (req, res) => {
+  try {
+    const { id, replyId } = req.params;
+
+    const doubt = await doubtService.deleteReply(id, replyId, req.user._id);
+
+    if (!doubt) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          message: 'Doubt or reply not found',
+          code: 'NOT_FOUND',
+        },
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: { doubt },
+    });
+  } catch (error) {
+    console.error('Error deleting reply:', error);
+    if (error.message === 'Unauthorized') {
+      return res.status(403).json({
+        success: false,
+        error: {
+          message: 'You can only delete your own replies',
+          code: 'FORBIDDEN',
+        },
+      });
+    }
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Failed to delete reply',
+        code: 'SERVER_ERROR',
+      },
+    });
+  }
+};
+
+
 export default {
   createDoubt,
   getDoubts,
@@ -501,4 +603,6 @@ export default {
   updateDoubt,
   deleteDoubt,
   addReply,
+  editReply,
+  deleteReply,
 };

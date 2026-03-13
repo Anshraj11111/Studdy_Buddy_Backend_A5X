@@ -24,10 +24,35 @@ app.use(helmet());
 // CORS middleware
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+    origin: function (origin, callback) {
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) return callback(null, true);
+      
+      const allowedOrigins = [
+        'http://localhost:3000',
+        'https://studdy-buddy-a5x.vercel.app',
+        'https://studdy-buddy-backend-a5x.onrender.com',
+        /https:\/\/studdy-buddy.*\.vercel\.app$/, // Allow all Vercel preview URLs
+      ];
+      
+      const isAllowed = allowedOrigins.some(allowed => {
+        if (allowed instanceof RegExp) {
+          return allowed.test(origin);
+        }
+        return allowed === origin;
+      });
+      
+      if (isAllowed) {
+        callback(null, true);
+      } else {
+        console.log('CORS blocked origin:', origin);
+        callback(null, true); // Temporarily allow all for debugging
+      }
+    },
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
+    exposedHeaders: ['Content-Type', 'Authorization'],
   })
 );
 

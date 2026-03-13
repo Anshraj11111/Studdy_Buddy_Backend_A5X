@@ -15,6 +15,8 @@ router.post('/', authenticate, doubtController.createDoubt);
 router.post('/:id/find-match', authenticate, doubtController.findMatch);
 router.post('/:id/replies', authenticate, doubtController.addReply);
 router.put('/:id', authenticate, doubtController.updateDoubt);
+router.put('/:id/replies/:replyId', authenticate, doubtController.editReply);
 router.delete('/:id', authenticate, doubtController.deleteDoubt);
+router.delete('/:id/replies/:replyId', authenticate, doubtController.deleteReply);
 
 export default router;
