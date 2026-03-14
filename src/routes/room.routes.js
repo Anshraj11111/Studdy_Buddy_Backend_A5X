@@ -2,11 +2,52 @@ import express from 'express';
 import { authenticate } from '../middleware/auth.middleware.js';
 import matchService from '../services/match.service.js';
 import messageService from '../services/message.service.js';
+import Room from '../models/Room.js';
 
 const router = express.Router();
 
 /**
- * Get all rooms for the current user
+ * Create or get a direct room between student and mentor
+ * POST /api/rooms/direct
+ */
+router.post('/direct', authenticate, async (req, res) => {
+  try {
+    const { otherUserId } = req.body;
+    const userId = req.user._id;
+
+    if (!otherUserId) {
+      return res.status(400).json({ success: false, error: { message: 'otherUserId is required' } });
+    }
+
+    // Check if room already exists between these two users
+    let room = await Room.findOne({
+      $or: [
+        { student1: userId, student2: otherUserId },
+        { student1: otherUserId, student2: userId },
+      ],
+    }).populate('student1').populate('student2');
+
+    if (!room) {
+      // Create new direct room
+      room = new Room({
+        student1: userId,
+        student2: otherUserId,
+        topic: 'Direct Message',
+        status: 'active',
+      });
+      await room.save();
+      room = await room.populate(['student1', 'student2']);
+    }
+
+    res.status(200).json({ success: true, data: { room } });
+  } catch (error) {
+    console.error('Error creating direct room:', error);
+    res.status(500).json({ success: false, error: { message: 'Failed to create room' } });
+  }
+});
+
+/**
+ * Get all rooms for the current user (works for both students and mentors)
  * GET /api/rooms
  */
 router.get('/', authenticate, async (req, res) => {
@@ -17,19 +58,13 @@ router.get('/', authenticate, async (req, res) => {
     
     res.status(200).json({
       success: true,
-      data: {
-        rooms,
-      },
+      data: { rooms },
     });
   } catch (error) {
     console.error('Error fetching rooms:', error);
     res.status(500).json({
       success: false,
-      error: {
-        message: 'Failed to fetch rooms',
-        code: 'SERVER_ERROR',
-        details: error.message,
-      },
+      error: { message: 'Failed to fetch rooms', code: 'SERVER_ERROR', details: error.message },
     });
   }
 });
@@ -53,10 +88,7 @@ router.get('/:id', authenticate, async (req, res) => {
     if (userId !== student1Id && userId !== student2Id) {
       return res.status(403).json({
         success: false,
-        error: {
-          message: 'You are not authorized to access this room',
-          code: 'FORBIDDEN',
-        },
+        error: { message: 'You are not authorized to access this room', code: 'FORBIDDEN' },
       });
     }
     

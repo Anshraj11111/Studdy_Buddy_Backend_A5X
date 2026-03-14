@@ -1,4 +1,24 @@
 import mentorService from '../services/mentor.service.js';
+import User from '../models/User.js';
+
+/**
+ * Get all mentors
+ * GET /api/mentor/all
+ */
+export const getAllMentors = async (req, res) => {
+  try {
+    const mentors = await User.find({ role: 'mentor' }).select('-password -mentorCode');
+    res.status(200).json({
+      success: true,
+      data: { mentors },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to fetch mentors', code: 'SERVER_ERROR' },
+    });
+  }
+};
 
 /**
  * Create a mentor request
@@ -235,6 +255,7 @@ export const completeRequest = async (req, res) => {
 };
 
 export default {
+  getAllMentors,
   createRequest,
   getPendingRequests,
   getMyRequests,

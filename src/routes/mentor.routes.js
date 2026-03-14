@@ -5,6 +5,7 @@ import authMiddleware from '../middleware/auth.middleware.js';
 const router = express.Router();
 
 // Public routes
+router.get('/all', mentorController.getAllMentors);
 router.get('/requests/pending', mentorController.getPendingRequests);
 
 // Protected routes
