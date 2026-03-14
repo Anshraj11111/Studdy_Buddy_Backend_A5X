@@ -15,12 +15,14 @@ const roomSchema = new mongoose.Schema(
     doubt1: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Doubt',
-      required: true,
+      required: false,
+      default: null,
     },
     doubt2: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Doubt',
-      required: true,
+      required: false,
+      default: null,
     },
     topic: {
       type: String,
