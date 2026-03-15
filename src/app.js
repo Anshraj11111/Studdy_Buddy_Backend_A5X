@@ -9,6 +9,8 @@ import resourceRoutes from './routes/resource.routes.js';
 import communityRoutes from './routes/community.routes.js';
 import mentorRoutes from './routes/mentor.routes.js';
 import roomRoutes from './routes/room.routes.js';
+import feedRoutes from './routes/feed.routes.js';
+import connectionRoutes from './routes/connection.routes.js';
 import { errorHandler } from './middleware/error.middleware.js';
 import { requestLogger } from './middleware/request-logger.middleware.js';
 import logger from './utils/logger.js';
@@ -57,8 +59,8 @@ app.use(
 );
 
 // Body parsing middleware with size limits
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ limit: '10mb', extended: true }));
+app.use(express.json({ limit: '20mb' }));
+app.use(express.urlencoded({ limit: '20mb', extended: true }));
 
 // Request logging
 app.use(requestLogger);
@@ -158,6 +160,8 @@ app.use('/api/resources', resourceRoutes);
 app.use('/api/communities', communityRoutes);
 app.use('/api/mentor', mentorRoutes);
 app.use('/api/rooms', roomRoutes);
+app.use('/api/feed', feedRoutes);
+app.use('/api/connections', connectionRoutes);
 
 // 404 handler
 app.use((req, res) => {
