@@ -1,9 +1,17 @@
 import express from 'express';
 import FeedPost from '../models/FeedPost.js';
+import Notification from '../models/Notification.js';
 import authMiddleware from '../middleware/auth.middleware.js';
 
 const router = express.Router();
 const { authenticate } = authMiddleware;
+
+// Helper: emit socket notification to a user
+const emitNotification = (io, userId, notification) => {
+  if (io) {
+    io.to(`user:${userId}`).emit('notification', notification);
+  }
+};
 
 // GET /api/feed?category=Robotics&page=1&limit=20
 router.get('/', authenticate, async (req, res) => {
@@ -91,6 +99,20 @@ router.post('/:id/like', authenticate, async (req, res) => {
       post.likes = post.likes.filter(id => String(id) !== uid);
     } else {
       post.likes.push(req.user._id);
+
+      // Notify post owner (not self)
+      if (String(post.userId) !== uid) {
+        const notif = await Notification.create({
+          recipient: post.userId,
+          sender: req.user._id,
+          type: 'like',
+          postId: post._id,
+          message: `${req.user.name} liked your post`,
+        });
+        const populated = await Notification.findById(notif._id).populate('sender', 'name profileImage');
+        const io = req.app.get('io');
+        emitNotification(io, String(post.userId), populated);
+      }
     }
     await post.save();
 
@@ -114,11 +136,25 @@ router.post('/:id/comment', authenticate, async (req, res) => {
     post.comments.push({ userId: req.user._id, content: content.trim() });
     await post.save();
 
-    const populated = await FeedPost.findById(post._id)
+    // Notify post owner (not self)
+    if (String(post.userId) !== String(req.user._id)) {
+      const notif = await Notification.create({
+        recipient: post.userId,
+        sender: req.user._id,
+        type: 'comment',
+        postId: post._id,
+        message: `${req.user.name} commented on your post`,
+      });
+      const populated = await Notification.findById(notif._id).populate('sender', 'name profileImage');
+      const io = req.app.get('io');
+      emitNotification(io, String(post.userId), populated);
+    }
+
+    const populatedPost = await FeedPost.findById(post._id)
       .populate('userId', 'name profileImage role')
       .populate('comments.userId', 'name profileImage');
 
-    res.status(201).json({ success: true, data: { post: populated } });
+    res.status(201).json({ success: true, data: { post: populatedPost } });
   } catch (err) {
     res.status(500).json({ success: false, error: { message: 'Failed to add comment' } });
   }

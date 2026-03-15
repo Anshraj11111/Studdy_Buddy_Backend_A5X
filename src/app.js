@@ -11,6 +11,7 @@ import mentorRoutes from './routes/mentor.routes.js';
 import roomRoutes from './routes/room.routes.js';
 import feedRoutes from './routes/feed.routes.js';
 import connectionRoutes from './routes/connection.routes.js';
+import notificationRoutes from './routes/notification.routes.js';
 import { errorHandler } from './middleware/error.middleware.js';
 import { requestLogger } from './middleware/request-logger.middleware.js';
 import logger from './utils/logger.js';
@@ -162,6 +163,7 @@ app.use('/api/mentor', mentorRoutes);
 app.use('/api/rooms', roomRoutes);
 app.use('/api/feed', feedRoutes);
 app.use('/api/connections', connectionRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // 404 handler
 app.use((req, res) => {

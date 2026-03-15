@@ -63,6 +63,9 @@ const io = new Server(server, {
 setupChatSocket(io);
 setupVideoSocket(io);
 
+// Make io accessible in routes via req.app.get('io')
+app.set('io', io);
+
 // Connect to databases and start server
 const startServer = async () => {
   try {
