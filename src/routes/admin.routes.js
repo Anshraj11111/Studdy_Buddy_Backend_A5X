@@ -6,7 +6,7 @@ const router = express.Router();
 // Admin secret middleware  checks x-admin-secret header
 const adminAuth = (req, res, next) => {
   const secret = req.headers['x-admin-secret'];
-  const expected = process.env.ADMIN_SECRET || 'admin123';
+  const expected = process.env.ADMIN_SECRET || 'H5';
   if (!secret || secret !== expected) {
     return res.status(401).json({ success: false, error: { message: 'Unauthorized' } });
   }
