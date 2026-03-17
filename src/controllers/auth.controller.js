@@ -191,12 +191,14 @@ export const getProfile = async (req, res) => {
  */
 export const updateProfile = async (req, res) => {
   try {
-    const { name, skills, profileImage } = req.body;
+    const { name, skills, profileImage, bio, address } = req.body;
 
     const user = await authService.updateProfile(req.user._id, {
       name,
       skills,
       profileImage,
+      bio,
+      address,
     });
 
     res.status(200).json({

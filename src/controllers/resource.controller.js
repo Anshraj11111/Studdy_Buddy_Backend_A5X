@@ -1,4 +1,5 @@
 import resourceService from '../services/resource.service.js';
+import { addXP } from '../services/xp.service.js';
 
 /**
  * Create a new resource
@@ -30,6 +31,9 @@ export const createResource = async (req, res) => {
       uploadedBy: req.user._id,
       isPublic: isPublic !== false,
     });
+
+    // Award XP for uploading a resource
+    addXP(req.user._id, 20);
 
     res.status(201).json({
       success: true,

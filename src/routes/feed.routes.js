@@ -2,6 +2,7 @@ import express from 'express';
 import FeedPost from '../models/FeedPost.js';
 import Notification from '../models/Notification.js';
 import authMiddleware from '../middleware/auth.middleware.js';
+import { addXP } from '../services/xp.service.js';
 
 const router = express.Router();
 const { authenticate } = authMiddleware;
@@ -64,6 +65,9 @@ router.post('/', authenticate, async (req, res) => {
 
     const populated = await FeedPost.findById(post._id)
       .populate('userId', 'name profileImage role skills');
+
+    // Award XP for creating a feed post
+    addXP(req.user._id, 5);
 
     res.status(201).json({ success: true, data: { post: populated } });
   } catch (err) {

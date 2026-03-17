@@ -1,5 +1,6 @@
 import mentorService from '../services/mentor.service.js';
 import User from '../models/User.js';
+import { addXP } from '../services/xp.service.js';
 
 /**
  * Get all mentors
@@ -225,6 +226,10 @@ export const completeRequest = async (req, res) => {
     const { id } = req.params;
 
     const request = await mentorService.completeRequest(id);
+
+    // Award XP to mentor and student on session complete
+    if (request.mentorId?._id) addXP(request.mentorId._id, 50);
+    if (request.studentId?._id) addXP(request.studentId._id, 30);
 
     res.status(200).json({
       success: true,

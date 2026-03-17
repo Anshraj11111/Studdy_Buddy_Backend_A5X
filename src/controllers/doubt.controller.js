@@ -1,5 +1,6 @@
 import doubtService from '../services/doubt.service.js';
 import matchService from '../services/match.service.js';
+import { addXP } from '../services/xp.service.js';
 
 /**
  * Create a new doubt
@@ -57,6 +58,9 @@ export const createDoubt = async (req, res) => {
       // Log matching error but don't fail the doubt creation
       console.error('Error during doubt matching:', matchError);
     }
+
+    // Award XP for posting a doubt
+    addXP(req.user._id, 10);
 
     res.status(201).json({
       success: true,
@@ -474,6 +478,9 @@ export const addReply = async (req, res) => {
         },
       });
     }
+
+    // Award XP for replying to a doubt
+    addXP(req.user._id, 15);
 
     res.status(200).json({
       success: true,

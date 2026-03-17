@@ -36,6 +36,16 @@ const userSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    bio: {
+      type: String,
+      default: '',
+      maxlength: [300, 'Bio cannot exceed 300 characters'],
+    },
+    address: {
+      type: String,
+      default: '',
+      maxlength: [200, 'Address cannot exceed 200 characters'],
+    },
     xp: {
       type: Number,
       default: 0,
