@@ -1,4 +1,5 @@
 import http from 'http';
+import { execSync } from 'child_process';
 import dotenv from 'dotenv';
 import { Server } from 'socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
@@ -16,6 +17,15 @@ dotenv.config();
 mongoose.set('strictQuery', false);
 
 const PORT = process.env.PORT || 5000;
+
+// Auto-kill any process occupying the port before starting
+try {
+  if (process.platform === 'win32') {
+    execSync(`for /f "tokens=5" %a in ('netstat -aon ^| find ":${PORT}" ^| find "LISTENING"') do taskkill /F /PID %a`, { stdio: 'ignore', shell: true });
+  } else {
+    execSync(`lsof -ti:${PORT} | xargs kill -9`, { stdio: 'ignore' });
+  }
+} catch { /* port was already free */ }
 
 // Create HTTP server
 const server = http.createServer(app);
@@ -81,6 +91,15 @@ const startServer = async () => {
       console.log(`✓ Server running on port ${PORT}`);
       console.log(`✓ Environment: ${process.env.NODE_ENV || 'development'}`);
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    });
+
+    server.on('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        console.error(`✗ Port ${PORT} is already in use. Kill the process and retry.`);
+        process.exit(1);
+      } else {
+        throw err;
+      }
     });
   } catch (error) {
     console.error('✗ Failed to start server:', error.message);
