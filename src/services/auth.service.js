@@ -45,8 +45,10 @@ class AuthService {
    */
   async login(email, password) {
     try {
-      // Find user by email
-      const user = await User.findOne({ email }).select('+password');
+      // Find user by email - select only needed fields, use lean() for speed
+      const user = await User.findOne({ email })
+        .select('+password _id name email role skills profileImage bio address xp mentorCode')
+        .lean();
       if (!user) {
         throw new Error('Invalid credentials');
       }
@@ -61,11 +63,10 @@ class AuthService {
       const token = this.generateToken(user._id);
 
       // Remove password from user object
-      const userObject = user.toObject();
-      delete userObject.password;
+      const { password: _, ...userWithoutPassword } = user;
 
       return {
-        user: userObject,
+        user: userWithoutPassword,
         token,
       };
     } catch (error) {
@@ -107,7 +108,7 @@ class AuthService {
    * @returns {Promise<string>} Hashed password
    */
   async hashPassword(password) {
-    const saltRounds = parseInt(process.env.BCRYPT_ROUNDS) || 10;
+    const saltRounds = parseInt(process.env.BCRYPT_ROUNDS) || 6; // Reduced to 6 for faster hashing
     return await bcrypt.hash(password, saltRounds);
   }
 

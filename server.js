@@ -79,14 +79,13 @@ app.set('io', io);
 // Connect to databases and start server
 const startServer = async () => {
   try {
-    // Connect to MongoDB
+    // Connect to MongoDB first (required)
     await connectDB();
 
-    // Connect to Redis
-    await connectRedis;
-    console.log('✓ Redis Connected');
+    // Connect to Redis (optional - non-blocking)
+    connectRedis().catch(() => {}); // Don't await - let it connect in background
 
-    // Start server
+    // Start server immediately after MongoDB
     server.listen(PORT, () => {
       console.log(`✓ Server running on port ${PORT}`);
       console.log(`✓ Environment: ${process.env.NODE_ENV || 'development'}`);

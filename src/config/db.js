@@ -3,29 +3,37 @@ import mongoose from "mongoose";
 const connectDB = async () => {
   try {
     const options = {
-      maxPoolSize: 10,
-      minPoolSize: 5,
-      serverSelectionTimeoutMS: 30000, // Increased to 30 seconds
-      socketTimeoutMS: 45000,
-      connectTimeoutMS: 30000, // Added connection timeout
-      family: 4, // Force IPv4 (some networks have IPv6 issues)
+      maxPoolSize: 20,        // More connections for concurrent requests
+      minPoolSize: 5,         // Keep minimum connections warm
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 20000,
+      connectTimeoutMS: 8000,
+      family: 4,
       retryWrites: true,
       w: 'majority',
+      // Performance optimizations
+      heartbeatFrequencyMS: 10000,
+      maxIdleTimeMS: 30000,
+      compressors: 'zlib',    // Compress data transfer
     };
 
     console.log('Connecting to MongoDB Atlas...');
     await mongoose.connect(process.env.MONGO_URI, options);
 
+    // Create indexes for faster auth queries
+    mongoose.connection.once('open', async () => {
+      try {
+        const db = mongoose.connection.db;
+        // Ensure email index exists for fast login lookups
+        await db.collection('users').createIndex({ email: 1 }, { unique: true, background: true });
+        console.log('✓ DB indexes verified');
+      } catch { /* indexes may already exist */ }
+    });
+
     console.log(`✓ MongoDB Connected: ${mongoose.connection.host}`);
 
   } catch (error) {
     console.error(`✗ MongoDB connection failed: ${error.message}`);
-    console.error('Troubleshooting tips:');
-    console.error('1. Check if IP whitelist includes 0.0.0.0/0 in MongoDB Atlas');
-    console.error('2. Wait 2-3 minutes after adding IP to whitelist');
-    console.error('3. Check your internet connection');
-    console.error('4. Verify MongoDB URI in .env file');
-    console.error('5. Check firewall/antivirus settings');
     process.exit(1);
   }
 };

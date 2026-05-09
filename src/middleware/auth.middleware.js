@@ -1,4 +1,5 @@
-import authService from '../services/auth.service.js';
+import jwt from 'jsonwebtoken';
+import User from '../models/User.js';
 
 /**
  * Authentication middleware
@@ -6,57 +7,47 @@ import authService from '../services/auth.service.js';
  */
 export const authenticate = async (req, res, next) => {
   try {
-    // Get token from header
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({
         success: false,
+        error: { message: 'No token provided', code: 'NO_TOKEN' },
+      });
+    }
+
+    const token = authHeader.substring(7);
+
+    // Verify JWT - fast, no DB call
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (err) {
+      return res.status(401).json({
+        success: false,
         error: {
-          message: 'No token provided',
-          code: 'NO_TOKEN',
+          message: err.name === 'TokenExpiredError' ? 'Token expired' : 'Invalid token',
+          code: err.name === 'TokenExpiredError' ? 'TOKEN_EXPIRED' : 'INVALID_TOKEN',
         },
       });
     }
 
-    // Extract token
-    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+    // Only fetch user from DB if we need full user object
+    // Use lean() for faster query - returns plain JS object
+    const user = await User.findById(decoded.userId).lean();
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        error: { message: 'User not found', code: 'USER_NOT_FOUND' },
+      });
+    }
 
-    // Verify token
-    const user = await authService.verifyToken(token);
-
-    // Attach user to request
     req.user = user;
-
     next();
   } catch (error) {
-    if (error.message === 'Invalid token' || error.message === 'Token expired') {
-      return res.status(401).json({
-        success: false,
-        error: {
-          message: error.message,
-          code: 'INVALID_TOKEN',
-        },
-      });
-    }
-
-    if (error.message === 'User not found') {
-      return res.status(401).json({
-        success: false,
-        error: {
-          message: 'User not found',
-          code: 'USER_NOT_FOUND',
-        },
-      });
-    }
-
-    // Generic error
     return res.status(500).json({
       success: false,
-      error: {
-        message: 'Authentication failed',
-        code: 'AUTH_ERROR',
-      },
+      error: { message: 'Authentication failed', code: 'AUTH_ERROR' },
     });
   }
 };

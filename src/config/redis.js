@@ -8,58 +8,41 @@ const connectRedis = async () => {
       url: process.env.REDIS_URL || 'redis://localhost:6379',
       socket: {
         reconnectStrategy: (retries) => {
-          if (retries > 10) {
-            console.error('Redis: Max reconnection attempts reached');
-            return new Error('Redis: Max reconnection attempts reached');
-          }
-          // Exponential backoff: 50ms, 100ms, 200ms, etc.
-          const delay = Math.min(retries * 50, 3000);
-          console.log(`Redis: Reconnecting in ${delay}ms...`);
-          return delay;
+          if (retries > 3) return false // Stop retrying after 3 attempts
+          return Math.min(retries * 100, 1000)
         },
-        connectTimeout: 10000,
+        connectTimeout: 3000, // 3s timeout - fail fast
       },
     });
 
-    // Event handlers
-    redisClient.on('error', (err) => {
-      console.error('Redis Client Error:', err.message);
-    });
-
-    redisClient.on('connect', () => {
-      console.log('Redis: Connecting...');
+    redisClient.on('error', () => {
+      // Silently handle - Redis is optional
+      redisClient = null;
     });
 
     redisClient.on('ready', () => {
-      console.log('Redis: Connected and ready 🚀');
+      console.log('✓ Redis Connected');
     });
 
-    redisClient.on('reconnecting', () => {
-      console.log('Redis: Reconnecting...');
-    });
-
-    redisClient.on('end', () => {
-      console.log('Redis: Connection closed');
-    });
-
-    // Connect to Redis
-    await redisClient.connect();
+    // Use Promise.race to not block if Redis is slow
+    await Promise.race([
+      redisClient.connect(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Redis timeout')), 3000))
+    ]);
 
     return redisClient;
   } catch (error) {
-    console.error(`Redis connection failed: ${error.message}`);
-    console.warn('Application will continue without Redis caching');
+    console.warn('⚠ Redis unavailable - running without cache');
+    redisClient = null;
     return null;
   }
 };
 
-const getRedisClient = () => {
-  return redisClient;
-};
+const getRedisClient = () => redisClient;
 
 const disconnectRedis = async () => {
   if (redisClient) {
-    await redisClient.quit();
+    try { await redisClient.quit() } catch {}
     redisClient = null;
   }
 };
