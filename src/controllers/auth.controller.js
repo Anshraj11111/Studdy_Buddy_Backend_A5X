@@ -149,6 +149,7 @@ export const login = async (req, res) => {
       });
     }
 
+    console.error('Login error:', error.message, error.stack);
     res.status(500).json({
       success: false,
       error: {

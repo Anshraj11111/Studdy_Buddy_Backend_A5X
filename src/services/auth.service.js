@@ -45,9 +45,9 @@ class AuthService {
    */
   async login(email, password) {
     try {
-      // Find user by email - select only needed fields, use lean() for speed
+      // Find user by email - select only needed fields
       const user = await User.findOne({ email })
-        .select('+password _id name email role skills profileImage bio address xp mentorCode')
+        .select('_id name email role skills profileImage bio address xp mentorCode password')
         .lean();
       if (!user) {
         throw new Error('Invalid credentials');
