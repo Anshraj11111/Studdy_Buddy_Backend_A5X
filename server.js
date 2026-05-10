@@ -10,6 +10,7 @@ import connectRedis from './src/config/redis.js';
 import setupChatSocket from './src/sockets/chat.socket.js';
 import setupVideoSocket from './src/sockets/video.socket.js';
 import logger from './src/utils/logger.js';
+import chatRoutes from "./src/routes/chatRoute.js";
 
 dotenv.config();
 
