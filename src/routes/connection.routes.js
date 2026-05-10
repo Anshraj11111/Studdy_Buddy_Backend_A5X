@@ -76,6 +76,23 @@ router.post('/request/:userId', authenticate, async (req, res) => {
     }
 
     const conn = await Connection.create({ requester: req.user._id, recipient: userId });
+
+    // Notify recipient via socket in real-time
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`user:${userId}`).emit('connectionRequest', {
+        type: 'connection_request',
+        from: {
+          _id: req.user._id,
+          name: req.user.name,
+          profileImage: req.user.profileImage,
+          role: req.user.role,
+        },
+        connectionId: conn._id,
+        message: `${req.user.name} sent you a connection request`,
+      });
+    }
+
     res.status(201).json({ success: true, data: { connection: conn } });
   } catch (err) {
     res.status(500).json({ success: false, error: { message: 'Failed to send request' } });
