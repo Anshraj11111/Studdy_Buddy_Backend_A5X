@@ -24,8 +24,17 @@ export const setupChatSocket = (io) => {
       socket.join(`user:${userId}`);
       console.log(`✅ User ${userId} joined personal room user:${userId} with socket ${socket.id}`);
       logger.info('User joined personal room', { userId, socketId: socket.id });
+
+      // Broadcast online status to all connected clients
+      io.emit('userOnline', { userId });
     } else {
       console.log(`⚠️ Socket ${socket.id} connected without userId in handshake.auth`);
+    }
+
+    // Send current online users to newly connected client
+    if (socket.handshake.auth?.userId) {
+      const onlineUserIds = Array.from(userSockets.keys());
+      socket.emit('onlineUsers', { userIds: onlineUserIds });
     }
 
     // Join room event
@@ -174,6 +183,8 @@ export const setupChatSocket = (io) => {
       // Remove from user sockets map
       if (socket.userId) {
         userSockets.delete(socket.userId);
+        // Broadcast offline status to all connected clients
+        io.emit('userOffline', { userId: socket.userId });
       }
 
       activeConnections.delete(socket.id);
