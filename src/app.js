@@ -13,7 +13,8 @@ import feedRoutes from './routes/feed.routes.js';
 import connectionRoutes from './routes/connection.routes.js';
 import notificationRoutes from './routes/notification.routes.js';
 import adminRoutes from './routes/admin.routes.js';
-import chatRoutes from './routes/chatroute.js';
+import chatRoutes from './routes/chatRoute.js';
+import googleAuthRoutes from './routes/google.auth.routes.js';
 import { errorHandler } from './middleware/error.middleware.js';
 import { requestLogger } from './middleware/request-logger.middleware.js';
 import logger from './utils/logger.js';
@@ -158,6 +159,7 @@ app.get('/health/redis', async (req, res) => {
 
 // API routes
 app.use('/api/auth', authRoutes);
+app.use('/api/auth', googleAuthRoutes);
 app.use('/api/doubts', doubtRoutes);
 app.use('/api/resources', resourceRoutes);
 app.use('/api/communities', communityRoutes);
