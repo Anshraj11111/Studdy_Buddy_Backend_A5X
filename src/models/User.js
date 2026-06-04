@@ -55,6 +55,49 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    bannerImage: {
+      type: String,
+      default: '',
+    },
+    headline: {
+      type: String,
+      default: '',
+      maxlength: [120, 'Headline cannot exceed 120 characters'],
+    },
+    socialLinks: {
+      github: { type: String, default: '' },
+      linkedin: { type: String, default: '' },
+      instagram: { type: String, default: '' },
+      website: { type: String, default: '' },
+    },
+    // Private fields — only visible to the owner, never exposed in public profile APIs
+    phone: {
+      type: String,
+      default: '',
+      maxlength: [20, 'Phone number cannot exceed 20 characters'],
+    },
+    privateAddress: {
+      type: String,
+      default: '',
+      maxlength: [300, 'Address cannot exceed 300 characters'],
+    },
+    // Student: school / college info
+    education: {
+      institution: { type: String, default: '' },
+      degree: { type: String, default: '' },
+      field: { type: String, default: '' },
+      startYear: { type: String, default: '' },
+      endYear: { type: String, default: '' },
+      description: { type: String, default: '', maxlength: [500, 'Description too long'] },
+    },
+    // Mentor: professional experience
+    experience: {
+      company: { type: String, default: '' },
+      role: { type: String, default: '' },
+      startYear: { type: String, default: '' },
+      endYear: { type: String, default: '' },
+      description: { type: String, default: '', maxlength: [500, 'Description too long'] },
+    },
     isActive: {
       type: Boolean,
       default: true,
@@ -65,8 +108,17 @@ const userSchema = new mongoose.Schema(
   }
 );
 
-// Method to exclude password from JSON responses
+// Method to exclude password and private fields from JSON responses
 userSchema.methods.toJSON = function () {
+  const user = this.toObject();
+  delete user.password;
+  delete user.phone;
+  delete user.privateAddress;
+  return user;
+};
+
+// Method to get full profile including private fields (for owner only)
+userSchema.methods.toOwnerJSON = function () {
   const user = this.toObject();
   delete user.password;
   return user;

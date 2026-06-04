@@ -166,22 +166,19 @@ export const login = async (req, res) => {
  */
 export const getProfile = async (req, res) => {
   try {
-    // User is already attached to req by auth middleware
     const user = await authService.getUserById(req.user._id);
+
+    // Use toOwnerJSON if available (includes private fields), otherwise fall back to toJSON
+    const userData = typeof user.toOwnerJSON === 'function' ? user.toOwnerJSON() : user.toJSON();
 
     res.status(200).json({
       success: true,
-      data: {
-        user,
-      },
+      data: { user: userData },
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      error: {
-        message: 'Failed to fetch profile',
-        code: 'SERVER_ERROR',
-      },
+      error: { message: 'Failed to fetch profile', code: 'SERVER_ERROR' },
     });
   }
 };
@@ -192,21 +189,19 @@ export const getProfile = async (req, res) => {
  */
 export const updateProfile = async (req, res) => {
   try {
-    const { name, skills, profileImage, bio, address } = req.body;
+    const { name, skills, profileImage, bannerImage, headline, bio, address, socialLinks, phone, privateAddress, education, experience } = req.body;
 
     const user = await authService.updateProfile(req.user._id, {
-      name,
-      skills,
-      profileImage,
-      bio,
-      address,
+      name, skills, profileImage, bannerImage, headline, bio, address,
+      socialLinks, phone, privateAddress, education, experience,
     });
+
+    // Use toOwnerJSON if available (includes private fields), otherwise fall back to toJSON
+    const userData = typeof user.toOwnerJSON === 'function' ? user.toOwnerJSON() : user.toJSON();
 
     res.status(200).json({
       success: true,
-      data: {
-        user,
-      },
+      data: { user: userData },
     });
   } catch (error) {
     if (error.message === 'User not found') {

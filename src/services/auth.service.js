@@ -47,7 +47,7 @@ class AuthService {
     try {
       // Find user by email - select only needed fields
       const user = await User.findOne({ email })
-        .select('_id name email role skills profileImage bio address xp mentorCode password')
+        .select('_id name email role skills profileImage bannerImage headline bio address socialLinks education experience xp mentorCode password')
         .lean();
       if (!user) {
         throw new Error('Invalid credentials');
