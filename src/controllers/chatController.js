@@ -1,3 +1,5 @@
+import { getModel } from '../config/gemini.js';
+
 const SYSTEM_PROMPT = `You are an AI study assistant for Studdy Buddy, a peer-to-peer learning platform focused on Robotics, Programming, AI/ML, IoT, Electronics, and Embedded Systems.
 
 Your role:
@@ -47,7 +49,6 @@ async function chatWithOpenRouter(message, history = []) {
 
 // ── Gemini fallback ─────────────────────────────────────────────────────────
 async function chatWithGemini(message, history = []) {
-  const { getModel } = await import('../config/gemini.js');
   let fullPrompt = SYSTEM_PROMPT + '\n\n';
   const recentHistory = history.slice(-6);
   if (recentHistory.length > 0) {
