@@ -43,7 +43,7 @@ const MODEL_CHAIN = [
 ];
 
 // ── Single model call ────────────────────────────────────────────────────────
-async function callModel(apiKey, model, messages) {
+async function callModel(apiKey, model, messages, maxTokens = 1024) {
   const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -52,8 +52,8 @@ async function callModel(apiKey, model, messages) {
       'HTTP-Referer': process.env.APP_URL || 'https://studdy-buddy-a5x.vercel.app',
       'X-Title': 'Studdy Buddy AI',
     },
-    body: JSON.stringify({ model, messages, max_tokens: 1024 }),
-    signal: AbortSignal.timeout(20000), // 20s per model max
+    body: JSON.stringify({ model, messages, max_tokens: maxTokens }),
+    signal: AbortSignal.timeout(20000),
   });
 
   const data = await res.json();
@@ -62,7 +62,6 @@ async function callModel(apiKey, model, messages) {
     const errMsg = data?.error?.message || `HTTP ${res.status}`;
     const err = new Error(errMsg);
     err.status = res.status;
-    // Skip to next model on rate-limit, not-found, or upstream errors
     err.skip = res.status === 429 || res.status === 404 ||
       errMsg.toLowerCase().includes('rate') ||
       errMsg.toLowerCase().includes('upstream') ||
@@ -71,14 +70,57 @@ async function callModel(apiKey, model, messages) {
     throw err;
   }
 
-  const content = data.choices?.[0]?.message?.content;
+  const choice = data.choices?.[0];
+  const content = choice?.message?.content;
   if (!content || !content.trim()) {
     const err = new Error('Empty response');
     err.skip = true;
     throw err;
   }
 
-  return content.trim();
+  return {
+    content: content.trim(),
+    // finish_reason: 'length' means token limit hit — response is incomplete
+    truncated: choice?.finish_reason === 'length',
+  };
+}
+
+// ── Continuation: if response was cut short, ask next model to continue ──────
+async function continueGeneration(apiKey, originalMessages, partialReply, chainStartIndex) {
+  console.log('[AI] Response truncated — continuing with next model...');
+
+  // Build continuation context: original convo + partial reply so far
+  const continuationMessages = [
+    ...originalMessages,
+    { role: 'assistant', content: partialReply },
+    {
+      role: 'user',
+      content: 'Your previous response was cut off. Please continue exactly from where you stopped, without repeating what was already said.',
+    },
+  ];
+
+  for (let i = chainStartIndex; i < MODEL_CHAIN.length; i++) {
+    const model = MODEL_CHAIN[i];
+    try {
+      console.log(`[AI] Continuation with: ${model}`);
+      const { content, truncated } = await callModel(
+        process.env.OPENROUTER_API_KEY, model, continuationMessages, 1024
+      );
+      console.log(`[AI] ✅ Continuation success: ${model}`);
+      // If still truncated, merge and try to continue again (max 1 more time)
+      if (truncated) {
+        return partialReply + '\n' + content + '\n[Response reached limit]';
+      }
+      return partialReply + '\n' + content;
+    } catch (err) {
+      console.warn(`[AI] Continuation failed on ${model}: ${err.message.substring(0, 60)}`);
+      if (err.skip) continue;
+      break;
+    }
+  }
+
+  // Could not continue — return what we have
+  return partialReply + '\n*(Response was cut short)*';
 }
 
 // ── Fallback chain ───────────────────────────────────────────────────────────
@@ -105,17 +147,25 @@ async function chatWithAI_internal(message, history = []) {
 
   let lastError = null;
 
-  for (const model of chain) {
+  for (let i = 0; i < chain.length; i++) {
+    const model = chain[i];
     try {
       console.log(`[AI] Trying: ${model}`);
-      const reply = await callModel(apiKey, model, messages);
-      console.log(`[AI] ✅ Success: ${model}`);
-      return { reply, model };
+      const { content, truncated } = await callModel(apiKey, model, messages);
+      console.log(`[AI] ✅ Success: ${model} | truncated: ${truncated}`);
+
+      // If token limit hit, continue the response with the next model
+      let finalReply = content;
+      if (truncated) {
+        finalReply = await continueGeneration(apiKey, messages, content, i + 1);
+      }
+
+      return { reply: finalReply, model };
     } catch (err) {
       console.warn(`[AI] ❌ ${model}: ${err.message.substring(0, 80)}`);
       lastError = err;
-      if (err.skip) continue;   // rate-limit / not-found → try next
-      throw err;                 // auth error or unexpected → stop
+      if (err.skip) continue;
+      throw err;
     }
   }
 
