@@ -9,16 +9,37 @@ Your role:
 
 Always respond in a helpful, friendly, and educational manner.`;
 
-// Free models tried in order — if one is rate-limited, next one is tried
-const FREE_MODELS = [
-  'z-ai/glm-4.5-air:free',
-  'google/gemma-4-31b-it:free',
-  'moonshotai/kimi-k2.6:free',
+// Priority-ordered list — tested live, fastest & most reliable first.
+// If one fails/rate-limits, automatically tries next.
+const MODEL_CHAIN = [
+  // Tier 1 — fastest responders (< 2s)
+  'liquid/lfm-2.5-1.2b-instruct:free',
+  'liquid/lfm-2.5-1.2b-thinking:free',
+
+  // Tier 2 — reliable mid-speed (2–3s)
+  'google/gemma-4-26b-a4b-it:free',
+  'openai/gpt-oss-120b:free',
+
+  // Tier 3 — slower but solid fallbacks (3–6s)
   'openai/gpt-oss-20b:free',
+  'nvidia/nemotron-nano-12b-v2-vl:free',
+  'moonshotai/kimi-k2.6:free',
   'nvidia/nemotron-3-super-120b-a12b:free',
-  'meta-llama/llama-3.3-70b-instruct:free',
+
+  // Tier 4 — extras that sometimes work
+  'google/gemma-4-31b-it:free',
+  'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
+  'nvidia/nemotron-3-nano-30b-a3b:free',
+  'nvidia/nemotron-nano-9b-v2:free',
+  'qwen/qwen3-next-80b-a3b-instruct:free',
+  'z-ai/glm-4.5-air:free',
   'qwen/qwen3-coder:free',
-  'openrouter/free',
+  'meta-llama/llama-3.3-70b-instruct:free',
+  'meta-llama/llama-3.2-3b-instruct:free',
+  'nousresearch/hermes-3-llama-3.1-405b:free',
+  'cognitivecomputations/dolphin-mistral-24b-venice-edition:free',
+  'poolside/laguna-xs.2:free',
+  'poolside/laguna-m.1:free',
 ];
 
 // ── Single model call ────────────────────────────────────────────────────────
@@ -32,6 +53,7 @@ async function callModel(apiKey, model, messages) {
       'X-Title': 'Studdy Buddy AI',
     },
     body: JSON.stringify({ model, messages, max_tokens: 1024 }),
+    signal: AbortSignal.timeout(20000), // 20s per model max
   });
 
   const data = await res.json();
@@ -40,33 +62,37 @@ async function callModel(apiKey, model, messages) {
     const errMsg = data?.error?.message || `HTTP ${res.status}`;
     const err = new Error(errMsg);
     err.status = res.status;
-    err.isRateLimit = res.status === 429 || errMsg.toLowerCase().includes('rate') || errMsg.toLowerCase().includes('upstream');
-    err.isNotFound = res.status === 404 || errMsg.toLowerCase().includes('no endpoints');
+    // Skip to next model on rate-limit, not-found, or upstream errors
+    err.skip = res.status === 429 || res.status === 404 ||
+      errMsg.toLowerCase().includes('rate') ||
+      errMsg.toLowerCase().includes('upstream') ||
+      errMsg.toLowerCase().includes('no endpoints') ||
+      errMsg.toLowerCase().includes('provider');
     throw err;
   }
 
   const content = data.choices?.[0]?.message?.content;
   if (!content || !content.trim()) {
     const err = new Error('Empty response');
-    err.isRateLimit = true; // treat empty as skip
+    err.skip = true;
     throw err;
   }
 
-  return content;
+  return content.trim();
 }
 
-// ── Fallback chain across all free models ───────────────────────────────────
-async function chatWithOpenRouter(message, history = []) {
+// ── Fallback chain ───────────────────────────────────────────────────────────
+async function chatWithAI_internal(message, history = []) {
   const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey || !apiKey.trim()) {
-    throw new Error('OPENROUTER_API_KEY not configured');
-  }
+  if (!apiKey || !apiKey.trim()) throw new Error('OPENROUTER_API_KEY not configured');
 
-  // Primary model from env, then fallback list
+  // If env overrides primary model, put it first
   const primaryModel = process.env.OPENROUTER_MODEL;
-  const modelQueue = primaryModel
-    ? [primaryModel, ...FREE_MODELS.filter(m => m !== primaryModel)]
-    : FREE_MODELS;
+  const chain = primaryModel && !MODEL_CHAIN.includes(primaryModel)
+    ? [primaryModel, ...MODEL_CHAIN]
+    : primaryModel
+      ? [primaryModel, ...MODEL_CHAIN.filter(m => m !== primaryModel)]
+      : MODEL_CHAIN;
 
   const messages = [
     { role: 'system', content: SYSTEM_PROMPT },
@@ -79,21 +105,17 @@ async function chatWithOpenRouter(message, history = []) {
 
   let lastError = null;
 
-  for (const model of modelQueue) {
+  for (const model of chain) {
     try {
-      console.log(`[AI] Trying model: ${model}`);
+      console.log(`[AI] Trying: ${model}`);
       const reply = await callModel(apiKey, model, messages);
-      console.log(`[AI] Success with: ${model}`);
+      console.log(`[AI] ✅ Success: ${model}`);
       return { reply, model };
     } catch (err) {
-      console.warn(`[AI] Model ${model} failed: ${err.message}`);
+      console.warn(`[AI] ❌ ${model}: ${err.message.substring(0, 80)}`);
       lastError = err;
-      // Only skip to next if rate-limited or not found — hard errors stop the chain
-      if (err.isRateLimit || err.isNotFound) {
-        continue;
-      }
-      // Auth error or other hard failure — no point trying more models
-      throw err;
+      if (err.skip) continue;   // rate-limit / not-found → try next
+      throw err;                 // auth error or unexpected → stop
     }
   }
 
@@ -113,8 +135,7 @@ export const chatWithAI = async (req, res) => {
       return res.status(500).json({ success: false, message: 'AI service not configured.' });
     }
 
-    const { reply, model } = await chatWithOpenRouter(message, history);
-
+    const { reply, model } = await chatWithAI_internal(message, history);
     return res.json({ success: true, reply, provider: 'openrouter', model });
 
   } catch (error) {
