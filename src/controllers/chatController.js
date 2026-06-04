@@ -1,5 +1,3 @@
-import { getModel } from '../config/gemini.js';
-
 const SYSTEM_PROMPT = `You are an AI study assistant for Studdy Buddy, a peer-to-peer learning platform focused on Robotics, Programming, AI/ML, IoT, Electronics, and Embedded Systems.
 
 Your role:
@@ -11,12 +9,14 @@ Your role:
 
 Always respond in a helpful, friendly, and educational manner.`;
 
-// ── OpenRouter chat (supports 100+ models via a single API) ─────────────────
+// ── OpenRouter chat ──────────────────────────────────────────────────────────
 async function chatWithOpenRouter(message, history = []) {
   const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) throw new Error('OPENROUTER_API_KEY not set');
+  if (!apiKey || !apiKey.trim()) {
+    throw new Error('OPENROUTER_API_KEY not configured');
+  }
 
-  const model = process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.1-8b-instruct:free';
+  const model = process.env.OPENROUTER_MODEL || 'google/gemma-4-31b-it:free';
 
   const messages = [
     { role: 'system', content: SYSTEM_PROMPT },
@@ -38,30 +38,22 @@ async function chatWithOpenRouter(message, history = []) {
     body: JSON.stringify({ model, messages, max_tokens: 1024 }),
   });
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err?.error?.message || `OpenRouter HTTP ${res.status}`);
-  }
-
   const data = await res.json();
-  return data.choices?.[0]?.message?.content || '';
-}
 
-// ── Gemini fallback ─────────────────────────────────────────────────────────
-async function chatWithGemini(message, history = []) {
-  let fullPrompt = SYSTEM_PROMPT + '\n\n';
-  const recentHistory = history.slice(-6);
-  if (recentHistory.length > 0) {
-    fullPrompt += 'Previous conversation:\n';
-    recentHistory.forEach(h => {
-      fullPrompt += `${h.role === 'user' ? 'Student' : 'Assistant'}: ${h.content}\n`;
-    });
-    fullPrompt += '\n';
+  if (!res.ok) {
+    const errMsg = data?.error?.message || `OpenRouter HTTP ${res.status}`;
+    console.error('[OpenRouter] Error response:', JSON.stringify(data));
+    const err = new Error(errMsg);
+    err.status = res.status;
+    throw err;
   }
-  fullPrompt += `Student: ${message.trim()}\nAssistant:`;
-  const model = getModel();
-  const result = await model.generateContent(fullPrompt);
-  return result.response.text();
+
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) {
+    throw new Error('Empty response from OpenRouter');
+  }
+
+  return content;
 }
 
 // ── Main handler ─────────────────────────────────────────────────────────────
@@ -73,39 +65,31 @@ export const chatWithAI = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Message is required' });
     }
 
-    let reply = '';
-    let provider = 'openrouter';
-
-    // Try OpenRouter first, fall back to Gemini
-    if (process.env.OPENROUTER_API_KEY) {
-      try {
-        reply = await chatWithOpenRouter(message, history);
-      } catch (orErr) {
-        console.warn('OpenRouter failed, falling back to Gemini:', orErr.message);
-        provider = 'gemini';
-        reply = await chatWithGemini(message, history);
-      }
-    } else {
-      provider = 'gemini';
-      reply = await chatWithGemini(message, history);
-    }
-
-    res.json({ success: true, reply, provider });
-
-  } catch (error) {
-    console.error('AI Error:', error.message);
-
-    if (error.message?.includes('API_KEY_INVALID') || error.message?.includes('API key')) {
-      return res.status(500).json({ success: false, message: 'AI service configuration error.' });
-    }
-    if (error.message?.includes('QUOTA_EXCEEDED') || error.message?.includes('quota') || error.message?.includes('429')) {
-      return res.status(429).json({ success: false, message: 'AI quota exceeded. Please try again later.' });
-    }
-    if (error.message?.includes('not set')) {
+    if (!process.env.OPENROUTER_API_KEY) {
       return res.status(500).json({ success: false, message: 'AI service not configured.' });
     }
 
-    res.status(500).json({
+    console.log('[AI Chat] Request:', message.substring(0, 60), '| model:', process.env.OPENROUTER_MODEL || 'openrouter/free');
+
+    const reply = await chatWithOpenRouter(message, history);
+
+    return res.json({ success: true, reply, provider: 'openrouter' });
+
+  } catch (error) {
+    console.error('[AI Chat] Error:', error.message);
+
+    if (error.status === 429 || error.message?.includes('rate') || error.message?.includes('429')) {
+      return res.status(429).json({
+        success: false,
+        message: 'AI is temporarily busy. Please try again in a moment.',
+      });
+    }
+
+    if (error.message?.includes('not configured') || error.message?.includes('not set')) {
+      return res.status(500).json({ success: false, message: 'AI service not configured.' });
+    }
+
+    return res.status(500).json({
       success: false,
       message: 'AI service temporarily unavailable. Please try again.',
     });
