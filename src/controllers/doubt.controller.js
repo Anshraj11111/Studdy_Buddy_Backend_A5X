@@ -1,6 +1,10 @@
 import doubtService from '../services/doubt.service.js';
 import matchService from '../services/match.service.js';
 import { addXP } from '../services/xp.service.js';
+import cache from '../services/cache.service.js';
+
+// Cache TTLs
+const DOUBTS_LIST_TTL = 30;  // 30 seconds — list is frequently changing
 
 /**
  * Create a new doubt
@@ -62,6 +66,9 @@ export const createDoubt = async (req, res) => {
     // Award XP for posting a doubt
     addXP(req.user._id, 10);
 
+    // Invalidate doubts list cache
+    await cache.delPattern('doubts:list:');
+
     res.status(201).json({
       success: true,
       data: {
@@ -89,45 +96,36 @@ export const getDoubts = async (req, res) => {
   try {
     const { page = 1, limit = 10, topic, status, userId } = req.query;
 
-    // Validate pagination
     const pageNum = Math.max(1, parseInt(page) || 1);
     const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 10));
 
-    // Build filters
     const filters = {};
     if (topic) filters.topic = topic;
     if (status) filters.status = status;
     if (userId) filters.userId = userId;
 
-    // Get doubts
-    const doubts = await doubtService.getDoubts(filters, {
-      page: pageNum,
-      limit: limitNum,
-    });
+    // Cache key based on query params
+    const cacheKey = `doubts:list:${JSON.stringify(filters)}:${pageNum}:${limitNum}`;
+    const cached = await cache.get(cacheKey);
+    if (cached) {
+      return res.status(200).json(cached);
+    }
 
-    // Get total count
+    const doubts = await doubtService.getDoubts(filters, { page: pageNum, limit: limitNum });
     const total = await doubtService.getDoubtsCount(filters);
 
-    res.status(200).json({
+    const response = {
       success: true,
       data: {
         doubts,
-        pagination: {
-          page: pageNum,
-          limit: limitNum,
-          total,
-          pages: Math.ceil(total / limitNum),
-        },
+        pagination: { page: pageNum, limit: limitNum, total, pages: Math.ceil(total / limitNum) },
       },
-    });
+    };
+
+    await cache.set(cacheKey, response, DOUBTS_LIST_TTL);
+    res.status(200).json(response);
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: {
-        message: 'Failed to fetch doubts',
-        code: 'SERVER_ERROR',
-      },
-    });
+    res.status(500).json({ success: false, error: { message: 'Failed to fetch doubts', code: 'SERVER_ERROR' } });
   }
 };
 
@@ -356,19 +354,12 @@ export const updateDoubt = async (req, res) => {
     }
 
     // Update the doubt
-    const updatedDoubt = await doubtService.updateDoubt(id, {
-      title,
-      description,
-      topic,
-      tags,
-    });
+    const updatedDoubt = await doubtService.updateDoubt(id, { title, description, topic, tags });
 
-    res.status(200).json({
-      success: true,
-      data: {
-        doubt: updatedDoubt,
-      },
-    });
+    // Invalidate cache
+    await cache.delPattern('doubts:list:');
+
+    res.status(200).json({ success: true, data: { doubt: updatedDoubt } });
   } catch (error) {
     if (error.message === 'Doubt not found') {
       return res.status(404).json({
@@ -418,12 +409,10 @@ export const deleteDoubt = async (req, res) => {
     // Delete the doubt
     await doubtService.deleteDoubt(id);
 
-    res.status(200).json({
-      success: true,
-      data: {
-        message: 'Doubt deleted successfully',
-      },
-    });
+    // Invalidate cache
+    await cache.delPattern('doubts:list:');
+
+    res.status(200).json({ success: true, data: { message: 'Doubt deleted successfully' } });
   } catch (error) {
     if (error.message === 'Doubt not found') {
       return res.status(404).json({
