@@ -19,6 +19,8 @@ export const setupChatSocket = (io) => {
     if (socket.handshake.auth && socket.handshake.auth.userId) {
       const userId = socket.handshake.auth.userId;
       socket.userId = userId;
+      socket.userName = socket.handshake.auth.userName || '';
+      socket.userImage = socket.handshake.auth.userImage || '';
       userSockets.set(userId, socket.id);
       // Join a personal room for this user
       socket.join(`user:${userId}`);
@@ -36,6 +38,12 @@ export const setupChatSocket = (io) => {
       const onlineUserIds = Array.from(userSockets.keys());
       socket.emit('onlineUsers', { userIds: onlineUserIds });
     }
+
+    // Handle request to get current online users (for late-mounting components)
+    socket.on('getOnlineUsers', () => {
+      const onlineUserIds = Array.from(userSockets.keys());
+      socket.emit('onlineUsers', { userIds: onlineUserIds });
+    });
 
     // Join room event
     socket.on('joinRoom', async (data) => {
@@ -112,11 +120,30 @@ export const setupChatSocket = (io) => {
           return;
         }
 
-        // Save message to database
+        // ── Optimistic broadcast — send immediately before DB write ──────────
+        const tempId = `temp_${Date.now()}_${Math.random()}`;
+        const now = new Date().toISOString();
+
+        // Get sender info from userSockets context
+        const optimisticMsg = {
+          _id: tempId,
+          senderId: userId,
+          content: content.trim(),
+          createdAt: now,
+          senderName: socket.userName || '',
+          senderImage: socket.userImage || '',
+          temp: true,
+        };
+
+        // Broadcast optimistically to everyone in room
+        io.to(roomId).emit('messageReceived', optimisticMsg);
+
+        // ── Save to DB in background ──────────────────────────────────────────
         const message = await MessageService.saveMessage(userId, roomId, content);
 
-        // Broadcast message to all users in room
-        io.to(roomId).emit('messageReceived', {
+        // Send confirmed message to replace the temp one
+        io.to(roomId).emit('messageConfirmed', {
+          tempId,
           _id: message._id,
           senderId: message.senderId,
           content: message.content,
@@ -124,6 +151,40 @@ export const setupChatSocket = (io) => {
           senderName: message.senderId.name,
           senderImage: message.senderId.profileImage,
         });
+
+        // ── Message notification to recipient ─────────────────────────────────
+        try {
+          // Find recipient (the other person in the room)
+          const room = await import('../models/Room.js').then(m => m.default.findById(roomId).select('student1 student2'));
+          if (room) {
+            const recipientId = String(room.student1) === String(userId)
+              ? String(room.student2)
+              : String(room.student1);
+
+            // Save notification to DB
+            const Notification = await import('../models/Notification.js').then(m => m.default);
+            const notif = await Notification.create({
+              recipient: recipientId,
+              sender: userId,
+              type: 'message',
+              message: `sent you a message: "${content.trim().substring(0, 60)}${content.length > 60 ? '...' : ''}"`,
+            });
+
+            // Emit real-time notification to recipient's personal room
+            const populatedNotif = await Notification.findById(notif._id).populate('sender', 'name profileImage');
+            io.to(`user:${recipientId}`).emit('notification', {
+              _id: populatedNotif._id,
+              type: 'message',
+              sender: populatedNotif.sender,
+              message: populatedNotif.message,
+              createdAt: populatedNotif.createdAt,
+              read: false,
+            });
+          }
+        } catch (notifErr) {
+          // Notification failure should not affect message delivery
+          logger.warn('Message notification failed', { error: notifErr.message });
+        }
 
         logger.debug('Message sent', { userId, roomId, messageId: message._id });
       } catch (error) {
