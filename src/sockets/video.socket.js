@@ -1,181 +1,139 @@
 export const setupVideoSocket = (io) => {
   io.on('connection', (socket) => {
-    // WebRTC offer event
-    socket.on('offer', (data) => {
-      try {
-        const { roomId, offer, fromUserId, toUserId } = data;
 
-        // Relay offer to the other user
-        socket.to(roomId).emit('offer', {
-          offer,
-          fromUserId,
-          toUserId,
-        });
-      } catch (error) {
-        console.error('Error sending offer:', error);
-        socket.emit('error', { message: 'Failed to send offer' });
-      }
-    });
+    // ── Helper: route directly to the recipient's personal room ──────────────
+    // user:{userId} rooms are joined synchronously at connect time, so they are
+    // always available — no async DB call, no join-race condition.
+    const toUser = (userId, event, payload) => {
+      io.to(`user:${userId}`).emit(event, payload);
+    };
 
-    // WebRTC answer event
-    socket.on('answer', (data) => {
-      try {
-        const { roomId, answer, fromUserId, toUserId } = data;
-
-        // Relay answer to the other user
-        socket.to(roomId).emit('answer', {
-          answer,
-          fromUserId,
-          toUserId,
-        });
-      } catch (error) {
-        console.error('Error sending answer:', error);
-        socket.emit('error', { message: 'Failed to send answer' });
-      }
-    });
-
-    // ICE candidate event
-    socket.on('iceCandidate', (data) => {
-      try {
-        const { roomId, candidate, fromUserId, toUserId } = data;
-
-        // Relay ICE candidate to the other user
-        socket.to(roomId).emit('iceCandidate', {
-          candidate,
-          fromUserId,
-          toUserId,
-        });
-      } catch (error) {
-        console.error('Error sending ICE candidate:', error);
-        socket.emit('error', { message: 'Failed to send ICE candidate' });
-      }
-    });
-
-    // Video call initiated event
+    // ── initiateCall ─────────────────────────────────────────────────────────
     socket.on('initiateCall', async (data) => {
       try {
         const { roomId, fromUserId, toUserId } = data;
-
         console.log('📞 Initiating call:', { roomId, fromUserId, toUserId });
 
-        // Fetch caller information from database using ES module import
         const { default: User } = await import('../models/User.js');
-        const caller = await User.findById(fromUserId).select('name email avatar');
+        const caller = await User.findById(fromUserId).select('name email profileImage');
 
-        console.log('📞 Caller info:', caller);
-
-        const callData = {
+        toUser(toUserId, 'incomingCall', {
           roomId,
           fromUserId,
           toUserId,
           caller: {
-            _id: caller._id,
-            name: caller.name,
-            email: caller.email,
-            avatar: caller.avatar,
+            _id:          caller._id,
+            name:         caller.name,
+            email:        caller.email,
+            profileImage: caller.profileImage,
           },
-        };
-
-        // Emit to the specific user's personal room (user:userId)
-        console.log(`📞 Emitting incomingCall to user:${toUserId}`);
-        io.to(`user:${toUserId}`).emit('incomingCall', callData);
-        console.log(`📞 Emitted incomingCall to user:${toUserId}`);
-        
-        // Also check if the user is in any socket rooms
-        const sockets = await io.in(`user:${toUserId}`).fetchSockets();
-        console.log(`📞 Found ${sockets.length} sockets in user:${toUserId} room`);
-        sockets.forEach(s => {
-          console.log(`  - Socket ${s.id} in rooms:`, Array.from(s.rooms));
         });
-      } catch (error) {
-        console.error('Error initiating call:', error);
+
+        console.log(`📞 incomingCall emitted → user:${toUserId}`);
+      } catch (err) {
+        console.error('initiateCall error:', err);
         socket.emit('error', { message: 'Failed to initiate call' });
       }
     });
 
-    // Call accepted event
-    socket.on('callAccepted', (data) => {
+    // ── offer ────────────────────────────────────────────────────────────────
+    socket.on('offer', (data) => {
       try {
-        const { roomId, fromUserId, toUserId } = data;
-
-        // Notify the caller that call was accepted
-        socket.to(roomId).emit('callAccepted', {
-          fromUserId,
-          toUserId,
-        });
-      } catch (error) {
-        console.error('Error accepting call:', error);
-        socket.emit('error', { message: 'Failed to accept call' });
+        const { offer, fromUserId, toUserId } = data;
+        console.log(`📡 offer: ${fromUserId} → ${toUserId}`);
+        toUser(toUserId, 'offer', { offer, fromUserId, toUserId });
+      } catch (err) {
+        console.error('offer error:', err);
+        socket.emit('error', { message: 'Failed to relay offer' });
       }
     });
 
-    // Call rejected event
+    // ── answer ───────────────────────────────────────────────────────────────
+    socket.on('answer', (data) => {
+      try {
+        const { answer, fromUserId, toUserId } = data;
+        console.log(`📡 answer: ${fromUserId} → ${toUserId}`);
+        toUser(toUserId, 'answer', { answer, fromUserId, toUserId });
+      } catch (err) {
+        console.error('answer error:', err);
+        socket.emit('error', { message: 'Failed to relay answer' });
+      }
+    });
+
+    // ── iceCandidate ─────────────────────────────────────────────────────────
+    socket.on('iceCandidate', (data) => {
+      try {
+        const { candidate, fromUserId, toUserId } = data;
+        toUser(toUserId, 'iceCandidate', { candidate, fromUserId, toUserId });
+      } catch (err) {
+        console.error('iceCandidate error:', err);
+        socket.emit('error', { message: 'Failed to relay ICE candidate' });
+      }
+    });
+
+    // ── callRejected ─────────────────────────────────────────────────────────
     socket.on('callRejected', (data) => {
       try {
-        const { roomId, fromUserId, toUserId } = data;
-
-        // Notify the caller that call was rejected
-        socket.to(roomId).emit('callRejected', {
-          fromUserId,
-          toUserId,
-        });
-      } catch (error) {
-        console.error('Error rejecting call:', error);
-        socket.emit('error', { message: 'Failed to reject call' });
+        const { fromUserId, toUserId } = data;
+        toUser(toUserId, 'callRejected', { fromUserId, toUserId });
+      } catch (err) {
+        console.error('callRejected error:', err);
       }
     });
 
-    // Call ended event
+    // ── callAccepted ─────────────────────────────────────────────────────────
+    socket.on('callAccepted', (data) => {
+      try {
+        const { fromUserId, toUserId } = data;
+        toUser(toUserId, 'callAccepted', { fromUserId, toUserId });
+      } catch (err) {
+        console.error('callAccepted error:', err);
+      }
+    });
+
+    // ── callEnded ────────────────────────────────────────────────────────────
     socket.on('callEnded', (data) => {
       try {
-        const { roomId, fromUserId, toUserId } = data;
-
-        // Notify the other user that call ended
-        socket.to(roomId).emit('callEnded', {
-          fromUserId,
-          toUserId,
-        });
-      } catch (error) {
-        console.error('Error ending call:', error);
-        socket.emit('error', { message: 'Failed to end call' });
+        const { fromUserId, toUserId } = data;
+        if (toUserId) {
+          toUser(toUserId, 'callEnded', { fromUserId, toUserId });
+        }
+      } catch (err) {
+        console.error('callEnded error:', err);
       }
     });
 
-    // Screen sharing started event
+    // ── screenShareStarted ───────────────────────────────────────────────────
     socket.on('screenShareStarted', (data) => {
       try {
-        const { roomId, fromUserId, toUserId } = data;
-
-        console.log('🖥️ Screen sharing started:', { roomId, fromUserId, toUserId });
-
-        // Notify the other user via chat room only (both users are in the room during call)
-        socket.to(roomId).emit('screenShareStarted', {
-          fromUserId,
-          toUserId,
-        });
-      } catch (error) {
-        console.error('Error notifying screen share start:', error);
-        socket.emit('error', { message: 'Failed to notify screen share start' });
+        const { fromUserId, toUserId } = data;
+        if (toUserId) toUser(toUserId, 'screenShareStarted', { fromUserId, toUserId });
+      } catch (err) {
+        console.error('screenShareStarted error:', err);
       }
     });
 
-    // Screen sharing stopped event
+    // ── screenShareStopped ───────────────────────────────────────────────────
     socket.on('screenShareStopped', (data) => {
       try {
-        const { roomId, fromUserId, toUserId } = data;
-
-        console.log('🖥️ Screen sharing stopped:', { roomId, fromUserId, toUserId });
-
-        // Notify the other user via chat room only (both users are in the room during call)
-        socket.to(roomId).emit('screenShareStopped', {
-          fromUserId,
-          toUserId,
-        });
-      } catch (error) {
-        console.error('Error notifying screen share stop:', error);
-        socket.emit('error', { message: 'Failed to notify screen share stop' });
+        const { fromUserId, toUserId } = data;
+        if (toUserId) toUser(toUserId, 'screenShareStopped', { fromUserId, toUserId });
+      } catch (err) {
+        console.error('screenShareStopped error:', err);
       }
     });
+
+    // ── calleeReady ──────────────────────────────────────────────────────────
+    socket.on('calleeReady', (data) => {
+      try {
+        const { roomId, fromUserId, toUserId } = data;
+        console.log(`📞 calleeReady: ${fromUserId} → ${toUserId}`);
+        toUser(toUserId, 'calleeReady', { fromUserId, toUserId });
+      } catch (err) {
+        console.error('calleeReady error:', err);
+      }
+    });
+
   });
 };
 

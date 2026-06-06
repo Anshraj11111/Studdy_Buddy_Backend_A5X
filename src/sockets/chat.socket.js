@@ -8,8 +8,25 @@ const MESSAGE_QUEUE_SIZE = 1000;
 export const setupChatSocket = (io) => {
   // Track active connections
   const activeConnections = new Map();
-  // Track user sockets by userId
-  const userSockets = new Map();
+  // Track user sockets by userId — Set allows multiple tabs per user
+  const userSockets = new Map(); // userId → Set<socketId>
+
+  const addUserSocket = (userId, socketId) => {
+    if (!userSockets.has(userId)) userSockets.set(userId, new Set());
+    userSockets.get(userId).add(socketId);
+  };
+
+  const removeUserSocket = (userId, socketId) => {
+    const sockets = userSockets.get(userId);
+    if (!sockets) return;
+    sockets.delete(socketId);
+    if (sockets.size === 0) userSockets.delete(userId);
+  };
+
+  const isUserOnline = (userId) => {
+    const sockets = userSockets.get(userId);
+    return sockets && sockets.size > 0;
+  };
 
   io.on('connection', (socket) => {
     logger.info('User connected', { socketId: socket.id });
@@ -21,7 +38,7 @@ export const setupChatSocket = (io) => {
       socket.userId = userId;
       socket.userName = socket.handshake.auth.userName || '';
       socket.userImage = socket.handshake.auth.userImage || '';
-      userSockets.set(userId, socket.id);
+      addUserSocket(userId, socket.id);
       // Join a personal room for this user
       socket.join(`user:${userId}`);
       console.log(`✅ User ${userId} joined personal room user:${userId} with socket ${socket.id}`);
@@ -58,7 +75,7 @@ export const setupChatSocket = (io) => {
         // Store userId and join personal room if not already done
         if (!socket.userId) {
           socket.userId = userId;
-          userSockets.set(userId, socket.id);
+          addUserSocket(userId, socket.id);
           socket.join(`user:${userId}`);
         }
 
@@ -243,9 +260,11 @@ export const setupChatSocket = (io) => {
 
       // Remove from user sockets map
       if (socket.userId) {
-        userSockets.delete(socket.userId);
-        // Broadcast offline status to all connected clients
-        io.emit('userOffline', { userId: socket.userId });
+        removeUserSocket(socket.userId, socket.id);
+        // Only broadcast offline if this user has no remaining sockets
+        if (!isUserOnline(socket.userId)) {
+          io.emit('userOffline', { userId: socket.userId });
+        }
       }
 
       activeConnections.delete(socket.id);
@@ -260,6 +279,7 @@ export const setupChatSocket = (io) => {
 
   // Make userSockets map available to other socket handlers
   io.userSockets = userSockets;
+  io.isUserOnline = isUserOnline;
 
   // Periodic cleanup of stale connections
   setInterval(() => {
