@@ -48,26 +48,21 @@ const io = new Server(server, {
         return allowed === origin;
       });
       
-      if (isAllowed) {
-        callback(null, true);
-      } else {
-        console.log('Socket CORS blocked origin:', origin);
-        callback(null, true);
-      }
+      // Allow all origins for now — tighten in production if needed
+      callback(null, true);
     },
     methods: ['GET', 'POST'],
     credentials: true,
     allowedHeaders: ['Content-Type', 'Authorization'],
   },
   // ── Increase buffer size to handle WebRTC SDP offers/answers (~50KB each) ──
-  maxHttpBufferSize: 10e6,   // 10MB — handles large WebRTC payloads
-  transports: ['websocket', 'polling'],  // prefer websocket, fall back to polling
+  maxHttpBufferSize: 10e6,
+  // WebSocket-only: avoids Render sticky-session issues with polling
+  transports: ['websocket'],
   allowEIO3: true,
   pingInterval: 25000,
   pingTimeout: 60000,
   connectTimeout: 45000,
-  // Upgrade to websocket ASAP — reduces 413 risk since WebSocket has no HTTP body limit
-  upgradeTimeout: 10000,
 });
 
 // Setup socket handlers
