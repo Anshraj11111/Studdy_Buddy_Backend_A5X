@@ -57,8 +57,8 @@ const io = new Server(server, {
   },
   // ── Increase buffer size to handle WebRTC SDP offers/answers (~50KB each) ──
   maxHttpBufferSize: 10e6,
-  // WebSocket-only: avoids Render sticky-session issues with polling
-  transports: ['websocket'],
+  // WebSocket with polling fallback for Render compatibility
+  transports: ['websocket', 'polling'],
   allowEIO3: true,
   pingInterval: 25000,
   pingTimeout: 60000,
