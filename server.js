@@ -35,19 +35,16 @@ const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
     origin: function (origin, callback) {
-      // Allow requests with no origin (mobile apps, Postman, etc.)
       if (!origin) return callback(null, true);
       
       const allowedOrigins = [
         'http://localhost:3000',
         'https://studdy-buddy-a5x.vercel.app',
-        /https:\/\/studdy-buddy.*\.vercel\.app$/, // All Vercel preview URLs
+        /https:\/\/studdy-buddy.*\.vercel\.app$/,
       ];
       
       const isAllowed = allowedOrigins.some(allowed => {
-        if (allowed instanceof RegExp) {
-          return allowed.test(origin);
-        }
+        if (allowed instanceof RegExp) return allowed.test(origin);
         return allowed === origin;
       });
       
@@ -55,19 +52,22 @@ const io = new Server(server, {
         callback(null, true);
       } else {
         console.log('Socket CORS blocked origin:', origin);
-        callback(null, true); // Temporarily allow all for debugging
+        callback(null, true);
       }
     },
     methods: ['GET', 'POST'],
     credentials: true,
     allowedHeaders: ['Content-Type', 'Authorization'],
   },
-  transports: ['websocket', 'polling'],
-  allowEIO3: true, // Enable compatibility with older clients
-  maxHttpBufferSize: 1e6, // 1MB
+  // ── Increase buffer size to handle WebRTC SDP offers/answers (~50KB each) ──
+  maxHttpBufferSize: 10e6,   // 10MB — handles large WebRTC payloads
+  transports: ['websocket', 'polling'],  // prefer websocket, fall back to polling
+  allowEIO3: true,
   pingInterval: 25000,
   pingTimeout: 60000,
   connectTimeout: 45000,
+  // Upgrade to websocket ASAP — reduces 413 risk since WebSocket has no HTTP body limit
+  upgradeTimeout: 10000,
 });
 
 // Setup socket handlers
