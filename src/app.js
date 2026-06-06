@@ -92,6 +92,29 @@ const authLimiter = rateLimit({
 // app.use('/api/', limiter);
 // app.use('/api/auth/', authLimiter);
 
+// ── ICE / TURN server config (served to clients for WebRTC) ──────────────
+app.get('/api/ice-servers', (req, res) => {
+  res.status(200).json({
+    success: true,
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:global.stun.twilio.com:3478' },
+      {
+        urls: [
+          'turn:openrelay.metered.ca:80',
+          'turn:openrelay.metered.ca:80?transport=tcp',
+          'turn:openrelay.metered.ca:443',
+          'turn:openrelay.metered.ca:443?transport=tcp',
+          'turns:openrelay.metered.ca:443',
+        ],
+        username: 'openrelayproject',
+        credential: 'openrelayproject',
+      },
+    ],
+  });
+});
+
 // Health check routes
 app.get('/health', (req, res) => {
   res.status(200).json({
