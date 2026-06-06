@@ -1,6 +1,7 @@
 import MessageService from '../services/message.service.js';
 import RoomService from '../services/room.service.js';
 import logger from '../utils/logger.js';
+import { checkContent } from '../utils/contentFilter.js';
 
 const MAX_MESSAGE_LENGTH = 5000;
 const MESSAGE_QUEUE_SIZE = 1000;
@@ -134,6 +135,15 @@ export const setupChatSocket = (io) => {
 
         if (content.length > MAX_MESSAGE_LENGTH) {
           socket.emit('error', { message: `Message exceeds ${MAX_MESSAGE_LENGTH} characters` });
+          return;
+        }
+
+        // ── Content moderation ────────────────────────────────────────────
+        const modResult = checkContent(content);
+        if (modResult.blocked) {
+          socket.emit('messageBLocked', {
+            reason: modResult.reason,
+          });
           return;
         }
 
