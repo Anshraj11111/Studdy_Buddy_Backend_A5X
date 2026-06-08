@@ -64,6 +64,7 @@ export const setupVideoSocket = (io) => {
     socket.on('iceCandidate', (data) => {
       try {
         const { candidate, fromUserId, toUserId } = data;
+        console.log(`🧊 ICE: ${fromUserId?.slice(-4)} → ${toUserId?.slice(-4)} | ${candidate?.candidate?.substring(0, 50) || 'null'}`);
         toUser(toUserId, 'iceCandidate', { candidate, fromUserId, toUserId });
       } catch (err) {
         console.error('iceCandidate error:', err);
