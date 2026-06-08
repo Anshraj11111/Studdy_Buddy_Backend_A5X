@@ -105,6 +105,7 @@ app.get('/api/ice-servers', async (req, res) => {
       );
       if (meteredRes.ok) {
         const iceServers = await meteredRes.json();
+        // Return clean ice servers without transport policy restriction
         return res.status(200).json({ success: true, iceServers });
       }
     }
