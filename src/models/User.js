@@ -51,6 +51,23 @@ const userSchema = new mongoose.Schema(
       default: 0,
       min: [0, 'XP cannot be negative'],
     },
+    tokens: {
+      type: Number,
+      default: 0,
+      min: [0, 'Tokens cannot be negative'],
+    },
+    streak: {
+      current: { type: Number, default: 0 },
+      longest: { type: Number, default: 0 },
+      lastActivityDate: { type: Date, default: null },
+    },
+    xpHistory: [
+      {
+        action:    { type: String },   // e.g. 'post', 'like_received', 'comment', 'doubt', 'streak_bonus'
+        amount:    { type: Number },
+        createdAt: { type: Date, default: Date.now },
+      },
+    ],
     profileImage: {
       type: String,
       default: '',

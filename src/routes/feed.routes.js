@@ -67,7 +67,7 @@ router.post('/', authenticate, async (req, res) => {
       .populate('userId', 'name profileImage role skills');
 
     // Award XP for creating a feed post
-    addXP(req.user._id, 5);
+    addXP(req.user._id, 'post');
 
     res.status(201).json({ success: true, data: { post: populated } });
   } catch (err) {
@@ -104,8 +104,11 @@ router.post('/:id/like', authenticate, async (req, res) => {
     } else {
       post.likes.push(req.user._id);
 
-      // Notify post owner (not self)
+      // Award XP to post owner for receiving a like
       if (String(post.userId) !== uid) {
+        addXP(String(post.userId), 'like_received');
+
+        // Notify post owner (not self)
         const notif = await Notification.create({
           recipient: post.userId,
           sender: req.user._id,
@@ -139,6 +142,12 @@ router.post('/:id/comment', authenticate, async (req, res) => {
 
     post.comments.push({ userId: req.user._id, content: content.trim() });
     await post.save();
+
+    // XP for commenter + post owner
+    addXP(String(req.user._id), 'comment');
+    if (String(post.userId) !== String(req.user._id)) {
+      addXP(String(post.userId), 'comment_received');
+    }
 
     // Notify post owner (not self)
     if (String(post.userId) !== String(req.user._id)) {

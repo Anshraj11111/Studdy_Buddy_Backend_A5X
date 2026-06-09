@@ -16,6 +16,7 @@ import followRoutes from './routes/follow.routes.js';
 import adminRoutes from './routes/admin.routes.js';
 import chatRoutes from './routes/chatRoute.js';
 import googleAuthRoutes from './routes/google.auth.routes.js';
+import rewardsRoutes from './routes/rewards.routes.js';
 import { errorHandler } from './middleware/error.middleware.js';
 import { requestLogger } from './middleware/request-logger.middleware.js';
 import logger from './utils/logger.js';
@@ -92,41 +93,46 @@ const authLimiter = rateLimit({
 // app.use('/api/', limiter);
 // app.use('/api/auth/', authLimiter);
 
-// ── ICE / TURN server config — fetches fresh credentials from Metered ────
+// ── ICE / TURN server config ──────────────────────────────────────────────
+// Fetches fresh short-lived credentials from Metered TURN, with static fallback
 app.get('/api/ice-servers', async (req, res) => {
+
+  // ── Metered TURN — fresh credentials (recommended) ───────────────────────
   try {
     const appName = process.env.METERED_APP_NAME;
     const apiKey  = process.env.METERED_API_KEY;
 
     if (appName && apiKey) {
-      // Fetch fresh TURN credentials from Metered's API
       const meteredRes = await fetch(
         `https://${appName}.metered.live/api/v1/turn/credentials?apiKey=${apiKey}`
       );
       if (meteredRes.ok) {
         const iceServers = await meteredRes.json();
-        // Return clean ice servers without transport policy restriction
+        console.log('✅ Metered TURN credentials fetched:', iceServers.length, 'servers');
         return res.status(200).json({ success: true, iceServers });
       }
     }
   } catch (err) {
-    // Fall through to defaults
+    console.warn('⚠️ Metered TURN fetch failed:', err.message);
   }
 
-  // Fallback to static TURN config
+  // ── Static fallback (when Metered API is unreachable) ────────────────────
+  console.warn('⚠️ Using static TURN fallback');
   res.status(200).json({
     success: true,
     iceServers: [
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun2.l.google.com:19302' },
       {
         urls: [
-          'turn:openrelay.metered.ca:80',
-          'turn:openrelay.metered.ca:443',
-          'turns:openrelay.metered.ca:443',
+          'turn:global.relay.metered.ca:80',
+          'turn:global.relay.metered.ca:80?transport=tcp',
+          'turn:global.relay.metered.ca:443',
+          'turns:global.relay.metered.ca:443?transport=tcp',
         ],
-        username: 'openrelayproject',
-        credential: 'openrelayproject',
+        username: 'dd9dff66bc88d50dc88d1cc3',
+        credential: '3a7ymuMhHgFio/OH',
       },
     ],
   });
@@ -215,6 +221,7 @@ app.use('/api/follow', followRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/admin', adminRoutes);
 app.use("/api/ai", chatRoutes);
+app.use('/api/rewards', rewardsRoutes);
 
 // 404 handler
 app.use((req, res) => {
