@@ -143,6 +143,9 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Keep-alive ping — separate from /health so ad blockers don't interfere
+app.get('/ping', (req, res) => res.status(200).json({ ok: true }));
+
 app.get('/health/db', async (req, res) => {
   try {
     const mongoose = await import('mongoose');
