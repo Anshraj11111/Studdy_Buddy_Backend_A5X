@@ -101,30 +101,36 @@ app.get('/api/ice-servers', async (req, res) => {
     { urls: 'stun:stun2.l.google.com:19302' },
   ];
 
-  // ── 1. Cloudflare TURN (most reliable — use if configured) ───────────────
+  // ── 1. Cloudflare TURN via HMAC credentials (key secret based) ──────────
   try {
-    const cfAccount = process.env.CF_ACCOUNT_ID;
-    const cfKeyId   = process.env.CF_TURN_KEY_ID;
-    const cfToken   = process.env.CF_API_TOKEN;
+    const cfKeyId  = process.env.CF_TURN_KEY_ID;
+    const cfSecret = process.env.CF_TURN_SECRET;
 
-    if (cfAccount && cfKeyId && cfToken) {
-      const cfRes = await fetch(
-        `https://rtc.live.cloudflare.com/v1/turn/keys/${cfKeyId}/credentials/generate`,
+    if (cfKeyId && cfSecret) {
+      const { createHmac } = await import('node:crypto');
+      const ttl       = 86400;
+      const timestamp = Math.floor(Date.now() / 1000) + ttl;
+      const username  = `${timestamp}:${cfKeyId}`;
+      const credential = createHmac('sha256', cfSecret).update(username).digest('base64');
+
+      const iceServers = [
+        ...stunServers,
         {
-          method:  'POST',
-          headers: { Authorization: `Bearer ${cfToken}`, 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ ttl: 86400 }),
-        }
-      );
-      if (cfRes.ok) {
-        const { iceServers: cfServers } = await cfRes.json();
-        const iceServers = [...stunServers, ...cfServers];
-        console.log('✅ Cloudflare TURN credentials fetched:', cfServers.length, 'servers');
-        return res.status(200).json({ success: true, iceServers });
-      }
+          urls: [
+            `turn:turn.cloudflare.com:3478?transport=udp`,
+            `turn:turn.cloudflare.com:3478?transport=tcp`,
+            `turn:turn.cloudflare.com:443?transport=tcp`,
+            `turns:turn.cloudflare.com:443?transport=tcp`,
+          ],
+          username,
+          credential,
+        },
+      ];
+      console.log('✅ Cloudflare TURN credentials generated via HMAC');
+      return res.status(200).json({ success: true, iceServers });
     }
   } catch (err) {
-    console.warn('⚠️ Cloudflare TURN fetch failed:', err.message);
+    console.warn('⚠️ Cloudflare TURN HMAC failed:', err.message);
   }
 
   // ── 2. Metered TURN fallback ──────────────────────────────────────────────
