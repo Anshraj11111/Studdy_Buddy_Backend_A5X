@@ -94,8 +94,14 @@ const authLimiter = rateLimit({
 // app.use('/api/auth/', authLimiter);
 
 // ── ICE / TURN server config ──────────────────────────────────────────────
-// Returns Metered TURN credentials — forced relay mode for guaranteed connectivity
 app.get('/api/ice-servers', async (req, res) => {
+  const stunServers = [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
+  ];
 
   // Fresh Metered credentials
   try {
@@ -107,8 +113,9 @@ app.get('/api/ice-servers', async (req, res) => {
         `https://${appName}.metered.live/api/v1/turn/credentials?apiKey=${apiKey}`
       );
       if (meteredRes.ok) {
-        const iceServers = await meteredRes.json();
-        console.log('✅ Metered TURN credentials fetched:', iceServers.length, 'servers');
+        const turnServers = await meteredRes.json();
+        const iceServers = [...stunServers, ...turnServers];
+        console.log('✅ Metered TURN credentials fetched:', turnServers.length, 'servers');
         return res.status(200).json({ success: true, iceServers });
       }
     }
@@ -116,10 +123,11 @@ app.get('/api/ice-servers', async (req, res) => {
     console.warn('⚠️ Metered TURN fetch failed:', err.message);
   }
 
-  // Static fallback — same Metered credentials hardcoded
+  // Static fallback
   res.status(200).json({
     success: true,
     iceServers: [
+      ...stunServers,
       {
         urls: [
           'turn:global.relay.metered.ca:80',
