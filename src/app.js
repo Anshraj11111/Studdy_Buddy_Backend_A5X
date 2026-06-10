@@ -94,10 +94,28 @@ const authLimiter = rateLimit({
 // app.use('/api/auth/', authLimiter);
 
 // ── ICE / TURN server config ──────────────────────────────────────────────
-// Fetches fresh short-lived credentials from Metered TURN, with static fallback
+// Always returns STUN + OpenRelay (no-auth fallback) + Metered fresh credentials
 app.get('/api/ice-servers', async (req, res) => {
 
-  // ── Metered TURN — fresh credentials (recommended) ───────────────────────
+  const baseServers = [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    // OpenRelay — always available, no auth, no rate limits
+    {
+      urls: [
+        'turn:openrelay.metered.ca:80',
+        'turn:openrelay.metered.ca:443',
+        'turns:openrelay.metered.ca:443',
+        'turn:openrelay.metered.ca:80?transport=tcp',
+      ],
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
+  ];
+
+  // Try to get fresh Metered credentials and merge them in
   try {
     const appName = process.env.METERED_APP_NAME;
     const apiKey  = process.env.METERED_API_KEY;
@@ -107,35 +125,19 @@ app.get('/api/ice-servers', async (req, res) => {
         `https://${appName}.metered.live/api/v1/turn/credentials?apiKey=${apiKey}`
       );
       if (meteredRes.ok) {
-        const iceServers = await meteredRes.json();
-        console.log('✅ Metered TURN credentials fetched:', iceServers.length, 'servers');
-        return res.status(200).json({ success: true, iceServers });
+        const meteredServers = await meteredRes.json();
+        const allServers = [...baseServers, ...meteredServers];
+        console.log('✅ Metered TURN credentials fetched:', meteredServers.length, 'servers');
+        return res.status(200).json({ success: true, iceServers: allServers });
       }
     }
   } catch (err) {
-    console.warn('⚠️ Metered TURN fetch failed:', err.message);
+    console.warn('⚠️ Metered TURN fetch failed, using base servers:', err.message);
   }
 
-  // ── Static fallback (when Metered API is unreachable) ────────────────────
-  console.warn('⚠️ Using static TURN fallback');
-  res.status(200).json({
-    success: true,
-    iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-      { urls: 'stun:stun2.l.google.com:19302' },
-      {
-        urls: [
-          'turn:global.relay.metered.ca:80',
-          'turn:global.relay.metered.ca:80?transport=tcp',
-          'turn:global.relay.metered.ca:443',
-          'turns:global.relay.metered.ca:443?transport=tcp',
-        ],
-        username: 'dd9dff66bc88d50dc88d1cc3',
-        credential: '3a7ymuMhHgFio/OH',
-      },
-    ],
-  });
+  // Metered unavailable — return base servers (OpenRelay + STUN still works)
+  console.warn('⚠️ Using base ICE servers only');
+  res.status(200).json({ success: true, iceServers: baseServers });
 });
 
 // Health check routes
