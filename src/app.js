@@ -99,11 +99,35 @@ app.get('/api/ice-servers', async (req, res) => {
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
-    { urls: 'stun:stun3.l.google.com:19302' },
-    { urls: 'stun:stun4.l.google.com:19302' },
   ];
 
-  // Fresh Metered credentials
+  // ── 1. Cloudflare TURN (most reliable — use if configured) ───────────────
+  try {
+    const cfAccount = process.env.CF_ACCOUNT_ID;
+    const cfKeyId   = process.env.CF_TURN_KEY_ID;
+    const cfToken   = process.env.CF_API_TOKEN;
+
+    if (cfAccount && cfKeyId && cfToken) {
+      const cfRes = await fetch(
+        `https://rtc.live.cloudflare.com/v1/turn/keys/${cfKeyId}/credentials/generate`,
+        {
+          method:  'POST',
+          headers: { Authorization: `Bearer ${cfToken}`, 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ ttl: 86400 }),
+        }
+      );
+      if (cfRes.ok) {
+        const { iceServers: cfServers } = await cfRes.json();
+        const iceServers = [...stunServers, ...cfServers];
+        console.log('✅ Cloudflare TURN credentials fetched:', cfServers.length, 'servers');
+        return res.status(200).json({ success: true, iceServers });
+      }
+    }
+  } catch (err) {
+    console.warn('⚠️ Cloudflare TURN fetch failed:', err.message);
+  }
+
+  // ── 2. Metered TURN fallback ──────────────────────────────────────────────
   try {
     const appName = process.env.METERED_APP_NAME;
     const apiKey  = process.env.METERED_API_KEY;
@@ -123,7 +147,7 @@ app.get('/api/ice-servers', async (req, res) => {
     console.warn('⚠️ Metered TURN fetch failed:', err.message);
   }
 
-  // Static fallback
+  // ── 3. Static fallback ────────────────────────────────────────────────────
   res.status(200).json({
     success: true,
     iceServers: [
