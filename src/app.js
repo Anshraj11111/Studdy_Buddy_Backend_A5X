@@ -98,42 +98,9 @@ app.get('/api/ice-servers', async (req, res) => {
   const stunServers = [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' },
   ];
 
-  // ── 1. Cloudflare TURN via HMAC credentials (key secret based) ──────────
-  try {
-    const cfKeyId  = process.env.CF_TURN_KEY_ID;
-    const cfSecret = process.env.CF_TURN_SECRET;
-
-    if (cfKeyId && cfSecret) {
-      const { createHmac } = await import('node:crypto');
-      const ttl       = 86400;
-      const timestamp = Math.floor(Date.now() / 1000) + ttl;
-      const username  = `${timestamp}:${cfKeyId}`;
-      const credential = createHmac('sha256', cfSecret).update(username).digest('base64');
-
-      const iceServers = [
-        ...stunServers,
-        { urls: 'stun:stun.cloudflare.com:3478' },
-        {
-          urls: [
-            'turn:turn.cloudflare.com:3478',
-            'turn:turn.cloudflare.com:3478?transport=tcp',
-            'turns:turn.cloudflare.com:5349',
-          ],
-          username,
-          credential,
-        },
-      ];
-      console.log('✅ Cloudflare TURN credentials generated via HMAC');
-      return res.status(200).json({ success: true, iceServers });
-    }
-  } catch (err) {
-    console.warn('⚠️ Cloudflare TURN HMAC failed:', err.message);
-  }
-
-  // ── 2. Metered TURN fallback ──────────────────────────────────────────────
+  // ── Priority 1: Metered TURN with fresh credentials ──────────────────────
   try {
     const appName = process.env.METERED_APP_NAME;
     const apiKey  = process.env.METERED_API_KEY;
@@ -153,18 +120,40 @@ app.get('/api/ice-servers', async (req, res) => {
     console.warn('⚠️ Metered TURN fetch failed:', err.message);
   }
 
-  // ── 3. Static fallback ────────────────────────────────────────────────────
+  // ── Priority 2: Cloudflare TURN via HMAC ─────────────────────────────────
+  try {
+    const cfKeyId  = process.env.CF_TURN_KEY_ID;
+    const cfSecret = process.env.CF_TURN_SECRET;
+
+    if (cfKeyId && cfSecret) {
+      const { createHmac } = await import('node:crypto');
+      const ttl       = 86400;
+      const timestamp = Math.floor(Date.now() / 1000) + ttl;
+      const username  = `${timestamp}:${cfKeyId}`;
+      const credential = createHmac('sha256', cfSecret).update(username).digest('base64');
+      const iceServers = [
+        ...stunServers,
+        { urls: 'stun:stun.cloudflare.com:3478' },
+        {
+          urls: ['turn:turn.cloudflare.com:3478', 'turn:turn.cloudflare.com:3478?transport=tcp', 'turns:turn.cloudflare.com:5349'],
+          username,
+          credential,
+        },
+      ];
+      console.log('✅ Cloudflare TURN credentials generated via HMAC');
+      return res.status(200).json({ success: true, iceServers });
+    }
+  } catch (err) {
+    console.warn('⚠️ Cloudflare TURN HMAC failed:', err.message);
+  }
+
+  // ── Static fallback ────────────────────────────────────────────────────────
   res.status(200).json({
     success: true,
     iceServers: [
       ...stunServers,
       {
-        urls: [
-          'turn:global.relay.metered.ca:80',
-          'turn:global.relay.metered.ca:80?transport=tcp',
-          'turn:global.relay.metered.ca:443',
-          'turns:global.relay.metered.ca:443?transport=tcp',
-        ],
+        urls: ['turn:global.relay.metered.ca:80', 'turn:global.relay.metered.ca:80?transport=tcp', 'turn:global.relay.metered.ca:443', 'turns:global.relay.metered.ca:443?transport=tcp'],
         username: 'dd9dff66bc88d50dc88d1cc3',
         credential: '3a7ymuMhHgFio/OH',
       },
