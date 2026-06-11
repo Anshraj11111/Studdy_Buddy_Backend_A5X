@@ -110,9 +110,33 @@ app.get('/api/ice-servers', async (req, res) => {
         `https://${appName}.metered.live/api/v1/turn/credentials?apiKey=${apiKey}`
       );
       if (meteredRes.ok) {
-        const turnServers = await meteredRes.json();
-        const iceServers = [...stunServers, ...turnServers];
-        console.log('✅ Metered TURN credentials fetched:', turnServers.length, 'servers');
+        const allServers = await meteredRes.json();
+        // Find the username/credential from fetched servers
+        const authServer = allServers.find(s => s.username && s.credential);
+        const username = authServer?.username;
+        const credential = authServer?.credential;
+
+        if (username && credential) {
+          // Use India-specific TURN server so both peers connect to same relay
+          const iceServers = [
+            ...stunServers,
+            {
+              urls: [
+                'turn:in.relay.metered.ca:80',
+                'turn:in.relay.metered.ca:80?transport=tcp',
+                'turn:in.relay.metered.ca:443',
+                'turns:in.relay.metered.ca:443?transport=tcp',
+              ],
+              username,
+              credential,
+            },
+          ];
+          console.log('✅ Metered India TURN configured with fresh credentials');
+          return res.status(200).json({ success: true, iceServers });
+        }
+        // Fallback: return all servers if no auth found
+        const iceServers = [...stunServers, ...allServers];
+        console.log('✅ Metered TURN credentials fetched:', allServers.length, 'servers');
         return res.status(200).json({ success: true, iceServers });
       }
     }
