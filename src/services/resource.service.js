@@ -1,6 +1,81 @@
 import Resource from '../models/Resource.js';
+import cloudinary from '../config/cloudinary.js';
+import { Readable } from 'stream';
 
 class ResourceService {
+  /**
+   * Upload a file buffer to Cloudinary
+   * @param {Buffer} fileBuffer - File buffer from multer memoryStorage
+   * @param {string} mimetype - File MIME type
+   * @param {string} originalName - Original filename
+   * @returns {Object} - Cloudinary upload result { url, publicId, fileType }
+   */
+  async uploadToCloudinary(fileBuffer, mimetype, originalName) {
+    return new Promise((resolve, reject) => {
+      // Determine Cloudinary resource type
+      let resourceType = 'auto';
+      let fileType = 'other';
+
+      if (mimetype.startsWith('image/')) {
+        resourceType = 'image';
+        fileType = 'image';
+      } else if (mimetype.startsWith('video/')) {
+        resourceType = 'video';
+        fileType = 'video';
+      } else if (mimetype === 'application/pdf') {
+        resourceType = 'raw';
+        fileType = 'pdf';
+      } else if (
+        mimetype.includes('word') ||
+        mimetype.includes('document')
+      ) {
+        resourceType = 'raw';
+        fileType = 'doc';
+      } else {
+        resourceType = 'raw';
+        fileType = 'other';
+      }
+
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
+          folder: 'studdy-buddy/resources',
+          resource_type: resourceType,
+          public_id: `${Date.now()}-${originalName.replace(/\s+/g, '_')}`,
+          use_filename: true,
+          unique_filename: false,
+        },
+        (error, result) => {
+          if (error) return reject(new Error(`Cloudinary upload failed: ${error.message}`));
+          resolve({
+            url: result.secure_url,
+            publicId: result.public_id,
+            fileType,
+          });
+        }
+      );
+
+      // Convert buffer to readable stream and pipe to Cloudinary
+      const readable = new Readable();
+      readable.push(fileBuffer);
+      readable.push(null);
+      readable.pipe(uploadStream);
+    });
+  }
+
+  /**
+   * Delete a file from Cloudinary
+   * @param {string} publicId - Cloudinary public ID
+   * @param {string} resourceType - 'image', 'video', or 'raw'
+   */
+  async deleteFromCloudinary(publicId, resourceType = 'raw') {
+    try {
+      await cloudinary.uploader.destroy(publicId, { resource_type: resourceType });
+    } catch (error) {
+      console.error('Cloudinary delete error:', error.message);
+      // Non-blocking — don't throw, just log
+    }
+  }
+
   /**
    * Create a new resource
    * @param {Object} resourceData - Resource data

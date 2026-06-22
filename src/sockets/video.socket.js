@@ -11,8 +11,8 @@ export const setupVideoSocket = (io) => {
     // ── initiateCall ─────────────────────────────────────────────────────────
     socket.on('initiateCall', async (data) => {
       try {
-        const { roomId, fromUserId, toUserId } = data;
-        console.log('📞 Initiating call:', { roomId, fromUserId, toUserId });
+        const { roomId, fromUserId, toUserId, callType } = data;
+        console.log('📞 Initiating call:', { roomId, fromUserId, toUserId, callType });
 
         const { default: User } = await import('../models/User.js');
         const caller = await User.findById(fromUserId).select('name email profileImage');
@@ -21,6 +21,7 @@ export const setupVideoSocket = (io) => {
           roomId,
           fromUserId,
           toUserId,
+          callType: callType || 'video',
           caller: {
             _id:          caller._id,
             name:         caller.name,

@@ -117,21 +117,22 @@ app.get('/api/ice-servers', async (req, res) => {
         const credential = authServer?.credential;
 
         if (username && credential) {
-          // Use India-specific TURN server so both peers connect to same relay
+          // Use specific Mumbai IP directly — avoids geo-DNS returning different servers
+          // 172.237.33.131 = Metered Mumbai relay (consistent for India users)
           const iceServers = [
             ...stunServers,
             {
               urls: [
-                'turn:in.relay.metered.ca:80',
-                'turn:in.relay.metered.ca:80?transport=tcp',
-                'turn:in.relay.metered.ca:443',
-                'turns:in.relay.metered.ca:443?transport=tcp',
+                'turn:172.237.33.131:80',
+                'turn:172.237.33.131:80?transport=tcp',
+                'turn:172.237.33.131:443',
+                'turns:172.237.33.131:443?transport=tcp',
               ],
               username,
               credential,
             },
           ];
-          console.log('✅ Metered India TURN configured with fresh credentials');
+          console.log('✅ Metered Mumbai TURN configured with direct IP');
           return res.status(200).json({ success: true, iceServers });
         }
         // Fallback: return all servers if no auth found
