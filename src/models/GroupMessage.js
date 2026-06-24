@@ -21,5 +21,8 @@ const groupMessageSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Index for fast paginated fetch (sorted by createdAt desc, filter deleted)
+groupMessageSchema.index({ deleted: 1, createdAt: -1 });
+
 const GroupMessage = mongoose.model('GroupMessage', groupMessageSchema);
 export default GroupMessage;

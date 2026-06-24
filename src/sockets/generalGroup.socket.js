@@ -43,7 +43,6 @@ export const setupGeneralGroupSocket = (io) => {
         if (!userId) return;
 
         // Only mentors can send messages
-        // We check role via socket.handshake.auth (set during initSocket)
         const role = socket.handshake.auth?.userRole;
         if (role !== 'mentor') {
           socket.emit('generalGroupError', { message: 'Only mentors can send messages' });
@@ -71,25 +70,45 @@ export const setupGeneralGroupSocket = (io) => {
           return;
         }
 
-        // Save to DB
-        const msg = await GroupMessage.create({ sender: userId, content: content.trim() });
-        const populated = await GroupMessage.findById(msg._id)
-          .populate('sender', 'name profileImage role');
-
-        // Broadcast to everyone in the group room
-        io.to(ROOM).emit('groupMessage', {
-          _id:       populated._id,
-          content:   populated.content,
-          createdAt: populated.createdAt,
+        // ── Optimistic broadcast FIRST — instant for everyone ────────────────
+        const tempId  = `temp_${Date.now()}_${Math.random()}`;
+        const now     = new Date().toISOString();
+        const optimistic = {
+          _id:       tempId,
+          content:   content.trim(),
+          createdAt: now,
+          temp:      true,
           sender: {
-            _id:          populated.sender._id,
-            name:         populated.sender.name,
-            profileImage: populated.sender.profileImage,
-            role:         populated.sender.role,
+            _id:          userId,
+            name:         socket.userName  || '',
+            profileImage: socket.userImage || '',
+            role:         role,
           },
-        });
+        };
+        io.to(ROOM).emit('groupMessage', optimistic);
 
-        logger.debug('Group message sent', { userId, msgId: msg._id });
+        // ── Save to DB in background ─────────────────────────────────────────
+        try {
+          const msg = await GroupMessage.create({ sender: userId, content: content.trim() });
+          const populated = await GroupMessage.findById(msg._id)
+            .populate('sender', 'name profileImage role')
+            .lean();
+
+          // Send confirmed message to replace temp
+          io.to(ROOM).emit('groupMessageConfirmed', {
+            tempId,
+            _id:       populated._id,
+            content:   populated.content,
+            createdAt: populated.createdAt,
+            sender:    populated.sender,
+          });
+        } catch (dbErr) {
+          logger.error('GroupMessage DB save failed', { error: dbErr.message });
+          // Tell room to remove the temp message
+          io.to(ROOM).emit('groupMessageFailed', { tempId });
+        }
+
+        logger.debug('Group message sent', { userId });
       } catch (err) {
         logger.error('sendGroupMessage error', { error: err.message });
         socket.emit('generalGroupError', { message: 'Failed to send message' });

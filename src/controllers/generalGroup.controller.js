@@ -73,7 +73,8 @@ export const getMessages = async (req, res) => {
       .populate('sender', 'name profileImage role')
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(limit);
+      .limit(limit)
+      .lean();   // plain JS — much faster than mongoose docs
 
     // Reverse so oldest first for the chat UI
     return res.status(200).json({
