@@ -9,6 +9,7 @@ import connectDB from './src/config/db.js';
 import connectRedis from './src/config/redis.js';
 import setupChatSocket from './src/sockets/chat.socket.js';
 import setupVideoSocket from './src/sockets/video.socket.js';
+import setupGeneralGroupSocket from './src/sockets/generalGroup.socket.js';
 import logger from './src/utils/logger.js';
 import chatRoutes from "./src/routes/chatRoute.js";
 
@@ -68,6 +69,7 @@ const io = new Server(server, {
 // Setup socket handlers
 setupChatSocket(io);
 setupVideoSocket(io);
+setupGeneralGroupSocket(io);
 
 // Make io accessible in routes via req.app.get('io')
 app.set('io', io);

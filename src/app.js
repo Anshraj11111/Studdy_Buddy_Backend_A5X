@@ -17,6 +17,7 @@ import adminRoutes from './routes/admin.routes.js';
 import chatRoutes from './routes/chatRoute.js';
 import googleAuthRoutes from './routes/google.auth.routes.js';
 import rewardsRoutes from './routes/rewards.routes.js';
+import generalGroupRoutes from './routes/generalGroup.routes.js';
 import { errorHandler } from './middleware/error.middleware.js';
 import { requestLogger } from './middleware/request-logger.middleware.js';
 import logger from './utils/logger.js';
@@ -270,6 +271,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/admin', adminRoutes);
 app.use("/api/ai", chatRoutes);
 app.use('/api/rewards', rewardsRoutes);
+app.use('/api/general-group', generalGroupRoutes);
 
 // 404 handler
 app.use((req, res) => {
