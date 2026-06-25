@@ -80,12 +80,17 @@ router.get('/:id', authenticate, async (req, res) => {
     // Get room details
     const room = await matchService.getRoomById(id);
     
-    // Check if user is part of this room
+    // ── Authorization: students must be participants, mentors can access all ──
     const userId = req.user._id.toString();
+    const userRole = req.user.role;
     const student1Id = room.student1._id.toString();
     const student2Id = room.student2._id.toString();
     
-    if (userId !== student1Id && userId !== student2Id) {
+    // Allow if: (1) user is a participant OR (2) user is a mentor
+    const isParticipant = userId === student1Id || userId === student2Id;
+    const isMentor = userRole === 'mentor';
+    
+    if (!isParticipant && !isMentor) {
       return res.status(403).json({
         success: false,
         error: { message: 'You are not authorized to access this room', code: 'FORBIDDEN' },
