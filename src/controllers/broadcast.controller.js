@@ -41,15 +41,9 @@ export const leaveChannel = async (req, res) => {
 export const getMyStatus = async (req, res) => {
   try {
     const userId = req.user._id
-    console.log('📋 getMyStatus - User:', userId);
     
     const enrollment = await BroadcastEnrollment.findOne({ user: userId });
     const pendingReq = await BroadcastJoinRequest.findOne({ user: userId, status: 'pending' });
-
-    console.log('📋 Raw enrollment from DB:', enrollment);
-    if (enrollment) {
-      console.log('📋 Enrollment channel:', enrollment.channel);
-    }
 
     const responseData = {
       success: true,
@@ -72,11 +66,9 @@ export const getMyStatus = async (req, res) => {
         : null,
     };
     
-    console.log('📋 Sending response:', responseData);
-    
     return res.json(responseData);
   } catch (err) {
-    console.error('❌ getMyStatus error:', err);
+    console.error('getMyStatus error:', err);
     return res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -86,22 +78,16 @@ export const joinChannel = async (req, res) => {
   try {
     const { channel, school, class: cls, code } = req.body;
     
-    console.log('🚀 joinChannel - User:', req.user._id, 'Channel:', channel);
-    console.log('🚀 joinChannel - VALID_CHANNELS:', VALID_CHANNELS);
-    
     if (!VALID_CHANNELS.includes(channel)) {
-      console.log('❌ Invalid channel:', channel);
       return res.status(400).json({ success: false, message: 'Invalid channel' });
     }
     
     if (!school || !cls || !code) {
-      console.log('❌ Missing fields');
       return res.status(400).json({ success: false, message: 'School, class and code are required' });
     }
 
     // Verify code
     const validCode = await BroadcastCode.findOne({ channel, code: code.trim(), active: true });
-    console.log('🔑 Code check for channel:', channel, '- Valid:', !!validCode);
     
     if (!validCode) {
       return res.status(400).json({ success: false, message: 'Invalid access code for this channel' });
@@ -110,11 +96,9 @@ export const joinChannel = async (req, res) => {
     // Check existing enrollment
     const existing = await BroadcastEnrollment.findOne({ user: req.user._id });
     if (existing) {
-      console.log('❌ User already enrolled in:', existing.channel);
       return res.status(400).json({ success: false, message: `Already enrolled in ${existing.channel}`, channel: existing.channel });
     }
 
-    console.log('📝 Creating enrollment for channel:', channel);
     const enrollment = await BroadcastEnrollment.create({
       user: req.user._id, 
       channel: channel, // Use exact channel value
@@ -123,12 +107,9 @@ export const joinChannel = async (req, res) => {
       code: code.trim(),
     });
 
-    console.log('✅ Created enrollment - ID:', enrollment._id, 'Channel:', enrollment.channel);
-
     // Verify the created enrollment has the correct channel
     if (enrollment.channel !== channel) {
-      console.error('💥 CRITICAL ERROR: Created enrollment has wrong channel!');
-      console.error('💥 Requested:', channel, 'Created:', enrollment.channel);
+      console.error('CRITICAL ERROR: Created enrollment has wrong channel! Requested:', channel, 'Created:', enrollment.channel);
       return res.status(500).json({ success: false, message: 'Database inconsistency detected' });
     }
 
@@ -139,15 +120,13 @@ export const joinChannel = async (req, res) => {
       joinedAt: enrollment.joinedAt,
       userId: enrollment.user
     };
-    
-    console.log('📤 Sending response enrollment:', responseEnrollment);
 
     return res.json({ 
       success: true, 
       enrollment: responseEnrollment
     });
   } catch (err) {
-    console.error('❌ joinChannel error:', err);
+    console.error('joinChannel error:', err);
     return res.status(500).json({ success: false, message: err.message });
   }
 };
