@@ -13,8 +13,8 @@ const broadcastEnrollmentSchema = new mongoose.Schema(
   { timestamps: false }
 );
 
-// One student = one primary enrollment (unique per user)
-broadcastEnrollmentSchema.index({ user: 1 }, { unique: true });
+// Allow multiple enrollments per user, but unique per user-channel combination
+broadcastEnrollmentSchema.index({ user: 1, channel: 1 }, { unique: true });
 
 const BroadcastEnrollment = mongoose.model('BroadcastEnrollment', broadcastEnrollmentSchema);
 export default BroadcastEnrollment;

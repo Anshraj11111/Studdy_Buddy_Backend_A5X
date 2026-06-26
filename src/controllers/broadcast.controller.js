@@ -9,27 +9,48 @@ const VALID_CHANNELS = ['robotics', 'aiml', 'electronics', 'renewable_energy'];
 export const leaveChannel = async (req, res) => {
   try {
     const userId = req.user._id;
-    console.log('User', userId, 'attempting to leave channel');
-
-    // Find and remove enrollment
-    const enrollment = await BroadcastEnrollment.findOneAndDelete({ user: userId });
+    const { channel } = req.body; // Optional - leave specific channel
     
-    if (!enrollment) {
-      return res.status(400).json({ success: false, message: 'Not enrolled in any channel' });
+    console.log('User', userId, 'attempting to leave channel:', channel || 'any');
+
+    let query = { user: userId };
+    if (channel) {
+      // Leave specific channel
+      query.channel = channel;
     }
 
-    // Also cancel any pending requests for this user
-    await BroadcastJoinRequest.updateMany(
-      { user: userId, status: 'pending' },
-      { status: 'cancelled' }
-    );
+    // Find and remove enrollment(s)
+    const deletedEnrollments = await BroadcastEnrollment.deleteMany(query);
+    
+    if (deletedEnrollments.deletedCount === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: channel ? `Not enrolled in ${channel} channel` : 'Not enrolled in any channel' 
+      });
+    }
 
-    console.log('User', userId, 'left channel:', enrollment.channel);
+    // Also cancel any pending requests for this user (if leaving specific channel)
+    if (channel) {
+      await BroadcastJoinRequest.updateMany(
+        { user: userId, requestedChannel: channel, status: 'pending' },
+        { status: 'cancelled' }
+      );
+    } else {
+      // Cancel all pending requests if leaving all channels
+      await BroadcastJoinRequest.updateMany(
+        { user: userId, status: 'pending' },
+        { status: 'cancelled' }
+      );
+    }
+
+    console.log('User', userId, 'left', deletedEnrollments.deletedCount, 'channel(s)');
 
     return res.json({ 
       success: true, 
-      message: `Successfully left ${enrollment.channel} channel`,
-      leftChannel: enrollment.channel 
+      message: channel 
+        ? `Successfully left ${channel} channel`
+        : `Successfully left ${deletedEnrollments.deletedCount} channel(s)`,
+      deletedCount: deletedEnrollments.deletedCount
     });
   } catch (err) {
     console.error('Leave channel error:', err);
@@ -42,21 +63,28 @@ export const getMyStatus = async (req, res) => {
   try {
     const userId = req.user._id
     
-    const enrollment = await BroadcastEnrollment.findOne({ user: userId });
+    // Get ALL enrollments for this user (allow multiple channels)
+    const enrollments = await BroadcastEnrollment.find({ user: userId });
     const pendingReq = await BroadcastJoinRequest.findOne({ user: userId, status: 'pending' });
 
     const responseData = {
       success: true,
       userId: userId, // Include user ID for frontend validation
-      enrollment: enrollment
-        ? { 
-            channel: enrollment.channel, 
-            school: enrollment.school, 
-            class: enrollment.class, 
-            joinedAt: enrollment.joinedAt,
-            userId: enrollment.user // Include for verification
-          }
-        : null,
+      enrollments: enrollments.map(enrollment => ({
+        channel: enrollment.channel, 
+        school: enrollment.school, 
+        class: enrollment.class, 
+        joinedAt: enrollment.joinedAt,
+        userId: enrollment.user // Include for verification
+      })),
+      // Keep backward compatibility
+      enrollment: enrollments.length > 0 ? {
+        channel: enrollments[0].channel, 
+        school: enrollments[0].school, 
+        class: enrollments[0].class, 
+        joinedAt: enrollments[0].joinedAt,
+        userId: enrollments[0].user
+      } : null,
       pendingRequest: pendingReq
         ? { 
             channel: pendingReq.requestedChannel, 
@@ -93,10 +121,18 @@ export const joinChannel = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid access code for this channel' });
     }
 
-    // Check existing enrollment
-    const existing = await BroadcastEnrollment.findOne({ user: req.user._id });
-    if (existing) {
-      return res.status(400).json({ success: false, message: `Already enrolled in ${existing.channel}`, channel: existing.channel });
+    // Check if already enrolled in THIS specific channel
+    const existingInThisChannel = await BroadcastEnrollment.findOne({ 
+      user: req.user._id, 
+      channel: channel 
+    });
+    
+    if (existingInThisChannel) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Already enrolled in ${channel}`, 
+        channel: channel 
+      });
     }
 
     const enrollment = await BroadcastEnrollment.create({
@@ -140,29 +176,42 @@ export const requestJoin = async (req, res) => {
     if (!VALID_CHANNELS.includes(channel))
       return res.status(400).json({ success: false, message: 'Invalid channel' });
 
-    const existing = await BroadcastEnrollment.findOne({ user: req.user._id });
-    if (!existing)
-      return res.status(400).json({ success: false, message: 'No existing enrollment found' });
+    // Check if already enrolled in this specific channel
+    const alreadyInThisChannel = await BroadcastEnrollment.findOne({ 
+      user: req.user._id, 
+      channel: channel 
+    });
+    if (alreadyInThisChannel)
+      return res.status(400).json({ success: false, message: 'Already enrolled in this channel' });
 
-    if (existing.channel === channel)
-      return res.status(400).json({ success: false, message: 'Already in this channel' });
+    // Get any existing enrollment to use its data
+    const existingEnrollment = await BroadcastEnrollment.findOne({ user: req.user._id });
+    if (!existingEnrollment)
+      return res.status(400).json({ success: false, message: 'No existing enrollment found. Please join a channel first.' });
 
-    // Check and cancel any existing pending request for this user
-    const existingPending = await BroadcastJoinRequest.findOne({ user: req.user._id, status: 'pending' });
-    if (existingPending) {
-      // Cancel the existing pending request and create new one
-      existingPending.status = 'cancelled';
-      await existingPending.save();
-    }
+    // Check for existing pending request for this channel
+    const existingPendingForChannel = await BroadcastJoinRequest.findOne({ 
+      user: req.user._id, 
+      requestedChannel: channel,
+      status: 'pending' 
+    });
+    if (existingPendingForChannel)
+      return res.status(400).json({ success: false, message: `Already have pending request for ${channel} channel` });
+
+    // Cancel any other pending requests for this user (only allow one pending at a time)
+    await BroadcastJoinRequest.updateMany(
+      { user: req.user._id, status: 'pending' },
+      { status: 'cancelled' }
+    );
 
     // Use existing enrollment details for the request
     const request = await BroadcastJoinRequest.create({
       user: req.user._id,
-      currentChannel: existing.channel,
+      currentChannel: existingEnrollment.channel,
       requestedChannel: channel,
-      school: existing.school,        // Use existing school
-      class: existing.class,          // Use existing class  
-      code: existing.code,            // Use existing code
+      school: existingEnrollment.school,        // Use existing school
+      class: existingEnrollment.class,          // Use existing class  
+      code: existingEnrollment.code,            // Use existing code
     });
 
     console.log('Join request created:', request._id);
@@ -296,19 +345,58 @@ export const acceptRequest = async (req, res) => {
     if (request.status !== 'pending')
       return res.status(400).json({ success: false, message: 'Request already resolved' });
 
-    // Update or create enrollment
-    await BroadcastEnrollment.findOneAndUpdate(
-      { user: request.user._id },
-      {
+    // Check if user is already enrolled in the requested channel
+    const existingInChannel = await BroadcastEnrollment.findOne({
+      user: request.user._id,
+      channel: request.requestedChannel
+    });
+
+    if (existingInChannel) {
+      console.log('User already enrolled in channel:', request.requestedChannel);
+      // Just mark request as accepted since user is already enrolled
+      request.status = 'accepted';
+      await request.save();
+      return res.json({ 
+        success: true, 
+        message: 'User already enrolled in this channel',
+        enrollment: existingInChannel 
+      });
+    }
+
+    // Create NEW enrollment (don't replace existing ones)
+    let newEnrollment;
+    try {
+      newEnrollment = await BroadcastEnrollment.create({
         user: request.user._id,
         channel: request.requestedChannel,
         school: request.school,
         class: request.class,
         code: request.code,
         joinedAt: new Date(),
-      },
-      { upsert: true, new: true }
-    );
+      });
+      
+      console.log('New enrollment created:', newEnrollment._id, 'for channel:', request.requestedChannel);
+    } catch (enrollmentError) {
+      // Handle duplicate key error specifically
+      if (enrollmentError.code === 11000) {
+        console.log('Duplicate enrollment detected, checking existing...');
+        
+        // Find the existing enrollment
+        const existingEnrollment = await BroadcastEnrollment.findOne({
+          user: request.user._id,
+          channel: request.requestedChannel
+        });
+        
+        if (existingEnrollment) {
+          console.log('Using existing enrollment:', existingEnrollment._id);
+          newEnrollment = existingEnrollment;
+        } else {
+          throw new Error('Duplicate key error but no existing enrollment found');
+        }
+      } else {
+        throw enrollmentError; // Re-throw if it's not a duplicate key error
+      }
+    }
 
     request.status = 'accepted';
     await request.save();
@@ -317,12 +405,20 @@ export const acceptRequest = async (req, res) => {
     try {
       const io = req.app.get('io');
       if (io) io.to(`user:${request.user._id}`).emit('broadcastRequestResolved', {
-        status: 'accepted', channel: request.requestedChannel,
+        status: 'accepted', 
+        channel: request.requestedChannel,
+        enrollment: {
+          channel: newEnrollment.channel,
+          school: newEnrollment.school,
+          class: newEnrollment.class,
+          joinedAt: newEnrollment.joinedAt
+        }
       });
     } catch (_) {}
 
-    return res.json({ success: true });
+    return res.json({ success: true, enrollment: newEnrollment });
   } catch (err) {
+    console.error('Accept request error:', err);
     return res.status(500).json({ success: false, message: err.message });
   }
 };
