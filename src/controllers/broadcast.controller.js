@@ -40,18 +40,12 @@ export const leaveChannel = async (req, res) => {
 // ── Get my enrollment status ──────────────────────────────────────────────────
 export const getMyStatus = async (req, res) => {
   try {
-    console.log('getMyStatus called for user:', req.user._id);
-    
-    // Use user ID explicitly to ensure no data crossover
     const userId = req.user._id
     
     const enrollment = await BroadcastEnrollment.findOne({ user: userId });
     const pendingReq = await BroadcastJoinRequest.findOne({ user: userId, status: 'pending' });
 
-    console.log('User', userId, 'enrollment:', enrollment);
-    console.log('User', userId, 'pending request:', pendingReq);
-
-    return res.json({
+    const responseData = {
       success: true,
       userId: userId, // Include user ID for frontend validation
       enrollment: enrollment
@@ -70,7 +64,9 @@ export const getMyStatus = async (req, res) => {
             userId: pendingReq.user // Include for verification
           }
         : null,
-    });
+    };
+    
+    return res.json(responseData);
   } catch (err) {
     console.error('getMyStatus error:', err);
     return res.status(500).json({ success: false, message: err.message });
@@ -81,27 +77,54 @@ export const getMyStatus = async (req, res) => {
 export const joinChannel = async (req, res) => {
   try {
     const { channel, school, class: cls, code } = req.body;
-    if (!VALID_CHANNELS.includes(channel))
+    
+    if (!VALID_CHANNELS.includes(channel)) {
       return res.status(400).json({ success: false, message: 'Invalid channel' });
-    if (!school || !cls || !code)
+    }
+    
+    if (!school || !cls || !code) {
       return res.status(400).json({ success: false, message: 'School, class and code are required' });
+    }
 
     // Verify code
     const validCode = await BroadcastCode.findOne({ channel, code: code.trim(), active: true });
-    if (!validCode)
+    
+    if (!validCode) {
       return res.status(400).json({ success: false, message: 'Invalid access code for this channel' });
+    }
 
     // Check existing enrollment
     const existing = await BroadcastEnrollment.findOne({ user: req.user._id });
-    if (existing)
+    if (existing) {
       return res.status(400).json({ success: false, message: `Already enrolled in ${existing.channel}`, channel: existing.channel });
+    }
 
     const enrollment = await BroadcastEnrollment.create({
-      user: req.user._id, channel, school: school.trim(), class: cls.trim(), code: code.trim(),
+      user: req.user._id, 
+      channel: channel, // Use exact channel value
+      school: school.trim(), 
+      class: cls.trim(), 
+      code: code.trim(),
     });
 
-    return res.json({ success: true, enrollment });
+    // Verify the created enrollment has the correct channel
+    if (enrollment.channel !== channel) {
+      console.error('CRITICAL ERROR: Created enrollment has wrong channel! Requested:', channel, 'Created:', enrollment.channel);
+      return res.status(500).json({ success: false, message: 'Database inconsistency detected' });
+    }
+
+    return res.json({ 
+      success: true, 
+      enrollment: {
+        channel: enrollment.channel,
+        school: enrollment.school,
+        class: enrollment.class,
+        joinedAt: enrollment.joinedAt,
+        userId: enrollment.user
+      }
+    });
   } catch (err) {
+    console.error('joinChannel error:', err);
     return res.status(500).json({ success: false, message: err.message });
   }
 };
