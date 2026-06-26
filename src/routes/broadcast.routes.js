@@ -5,7 +5,7 @@ import {
   getMessages, deleteMessage,
   addCode, getCodes, deleteCode, updateCode,
   getPendingRequests, acceptRequest, rejectRequest,
-  getChannelMembers,
+  getChannelMembers, getAllEnrollments,
 } from '../controllers/broadcast.controller.js';
 
 const router = express.Router();
@@ -36,5 +36,6 @@ router.delete('/admin/codes/:id',       adminAuth, deleteCode);
 router.get('/admin/requests',           adminAuth, getPendingRequests);
 router.put('/admin/requests/:id/accept',adminAuth, acceptRequest);
 router.put('/admin/requests/:id/reject',adminAuth, rejectRequest);
+router.get('/admin/enrollments',        adminAuth, getAllEnrollments);
 
 export default router;
