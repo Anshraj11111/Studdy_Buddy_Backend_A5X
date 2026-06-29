@@ -1,5 +1,28 @@
 import resourceService from '../services/resource.service.js';
 import { addXP } from '../services/xp.service.js';
+import { generateVideoToken, verifyVideoToken } from '../utils/videoToken.js';
+
+// Helper — extract YouTube video ID from a stored URL
+function extractYouTubeId(url) {
+  if (!url) return null;
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,
+    /youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/,
+  ];
+  for (const p of patterns) {
+    const m = url.match(p);
+    if (m) return m[1];
+  }
+  return null;
+}
+
+// Helper — strip fileUrl from resource before sending to client
+function sanitizeResource(resource) {
+  if (!resource) return resource;
+  const obj = resource.toObject ? resource.toObject() : { ...resource };
+  delete obj.fileUrl;  // Never expose raw URL
+  return obj;
+}
 
 /**
  * Create a new resource
@@ -317,6 +340,94 @@ export const deleteResource = async (req, res) => {
   }
 };
 
+/**
+ * Issue a short-lived signed token for watching a video resource.
+ * Returns the YouTube video ID (not the full URL) to the frontend.
+ * POST /api/resources/:id/token  (auth required)
+ */
+export const getVideoToken = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const resource = await resourceService.getResourceById(id);
+
+    if (resource.fileType !== 'link') {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'Not a video resource', code: 'INVALID_TYPE' },
+      });
+    }
+
+    const videoId = extractYouTubeId(resource.fileUrl);
+    if (!videoId) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'Invalid YouTube URL stored', code: 'INVALID_URL' },
+      });
+    }
+
+    // Generate signed token
+    const token = generateVideoToken(id, String(req.user._id));
+
+    // Increment view count
+    resourceService.incrementDownloadCount(id).catch(() => {});
+
+    // Return the signed token AND the video ID
+    // The frontend uses the video ID to build the embed URL directly
+    // This avoids the iframe redirect issue while still protecting the full URL
+    res.status(200).json({ success: true, data: { token, videoId } });
+  } catch (error) {
+    if (error.message === 'Resource not found') {
+      return res.status(404).json({
+        success: false,
+        error: { message: error.message, code: 'NOT_FOUND' },
+      });
+    }
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to generate token', code: 'SERVER_ERROR' },
+    });
+  }
+};
+
+/**
+ * Validate token and redirect iframe to YouTube embed.
+ * GET /api/resources/watch/:token  (no auth header needed — token IS the auth)
+ * The iframe src points here; browser follows the redirect to YouTube embed.
+ * No credentials are exposed to the frontend JS.
+ */
+export const watchVideo = async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { resourceId } = verifyVideoToken(token);
+
+    const resource = await resourceService.getResourceById(resourceId);
+    const videoId = extractYouTubeId(resource.fileUrl);
+
+    if (!videoId) {
+      return res.status(400).send('Invalid video URL');
+    }
+
+    // Redirect the iframe to the YouTube nocookie embed
+    // youtube-nocookie.com prevents YouTube from setting tracking cookies
+    const embedUrl = `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1`;
+    res.redirect(302, embedUrl);
+  } catch (error) {
+    const isExpired = error.message === 'Token expired';
+    const status = isExpired ? 410 : 403;
+    // Return a small HTML page shown inside the iframe on error
+    res.status(status).send(`
+      <!DOCTYPE html>
+      <html>
+        <body style="display:flex;align-items:center;justify-content:center;height:100vh;
+                     background:#0f0f0f;color:white;font-family:sans-serif;margin:0;flex-direction:column;gap:12px">
+          <div style="font-size:2rem">⏰</div>
+          <p style="margin:0;font-size:1rem">${isExpired ? 'Session expired. Please reload and try again.' : 'Access denied.'}</p>
+        </body>
+      </html>
+    `);
+  }
+};
+
 export default {
   createResource,
   getResources,
@@ -325,4 +436,6 @@ export default {
   getResourcesByTopic,
   downloadResource,
   deleteResource,
+  getVideoToken,
+  watchVideo,
 };
