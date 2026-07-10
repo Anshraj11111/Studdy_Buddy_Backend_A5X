@@ -141,6 +141,15 @@ userSchema.methods.toOwnerJSON = function () {
   return user;
 };
 
+// ── Performance Indexes for 10K+ users ──────────────────────────────────────────
+userSchema.index({ email: 1 });                    // Login queries (unique already)
+userSchema.index({ role: 1 });                     // Filter by role
+userSchema.index({ role: 1, xp: -1 });             // Leaderboard queries
+userSchema.index({ 'skills': 1 });                 // Search by skills
+userSchema.index({ createdAt: -1 });               // Recent users
+userSchema.index({ isActive: 1, role: 1 });        // Active users by role
+userSchema.index({ mentorCode: 1 }, { sparse: true }); // Mentor lookup
+
 const User = mongoose.model('User', userSchema);
 
 export default User;

@@ -6,6 +6,8 @@ import {
   addCode, getCodes, deleteCode, updateCode,
   getPendingRequests, acceptRequest, rejectRequest,
   getChannelMembers, getAllEnrollments,
+  // ── YouTube Live Stream functions ──
+  getStreamStatus, updateStreamUrl, startStream, stopStream,
 } from '../controllers/broadcast.controller.js';
 
 const router = express.Router();
@@ -37,5 +39,11 @@ router.get('/admin/requests',           adminAuth, getPendingRequests);
 router.put('/admin/requests/:id/accept',adminAuth, acceptRequest);
 router.put('/admin/requests/:id/reject',adminAuth, rejectRequest);
 router.get('/admin/enrollments',        adminAuth, getAllEnrollments);
+
+// ── YouTube Live Stream routes (Admin + Students) ─────────────────────────────
+router.get('/stream/:channel',          authenticate, getStreamStatus);      // Get current stream
+router.put('/admin/stream/:channel',    adminAuth, updateStreamUrl);        // Update YouTube video ID
+router.post('/admin/stream/:channel/start', adminAuth, startStream);        // Mark as live
+router.post('/admin/stream/:channel/stop',  adminAuth, stopStream);         // Mark as ended
 
 export default router;

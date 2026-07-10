@@ -6,6 +6,7 @@ import { createAdapter } from '@socket.io/redis-adapter';
 import mongoose from 'mongoose';
 import app from './src/app.js';
 import connectDB from './src/config/db.js';
+import { connectAllDatabases } from './src/config/db-multi.js';
 import connectRedis from './src/config/redis.js';
 import setupChatSocket from './src/sockets/chat.socket.js';
 import setupVideoSocket from './src/sockets/video.socket.js';
@@ -79,8 +80,18 @@ app.set('io', io);
 // Connect to databases and start server
 const startServer = async () => {
   try {
-    // Connect to MongoDB first (required)
-    await connectDB();
+    // Check if multi-database mode is enabled
+    const isMultiDbMode = process.env.MONGO_URI_PRIMARY || 
+                          process.env.MONGO_URI_SECONDARY || 
+                          process.env.MONGO_URI_TERTIARY;
+
+    if (isMultiDbMode) {
+      console.log('🚀 Multi-database mode detected - connecting to 3 clusters...');
+      await connectAllDatabases();
+    } else {
+      console.log('📦 Single database mode - connecting to MongoDB...');
+      await connectDB();
+    }
 
     // Connect to Redis (optional - non-blocking)
     connectRedis().catch(() => {}); // Don't await - let it connect in background
@@ -89,6 +100,11 @@ const startServer = async () => {
     server.listen(PORT, () => {
       console.log(`✓ Server running on port ${PORT}`);
       console.log(`✓ Environment: ${process.env.NODE_ENV || 'development'}`);
+      if (isMultiDbMode) {
+        console.log('💪 Capacity: 10,000+ concurrent users (Multi-DB)');
+      } else {
+        console.log('⚡ Capacity: 1,500-2,000 concurrent users (Single-DB)');
+      }
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     });
 

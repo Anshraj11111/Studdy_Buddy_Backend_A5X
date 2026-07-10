@@ -499,3 +499,180 @@ export const getAllEnrollments = async (req, res) => {
     return res.status(500).json({ success: false, message: err.message });
   }
 };
+
+// ══════════════════════════════════════════════════════════════════════════════
+// YouTube Live Stream Management (for 10K+ viewers)
+// ══════════════════════════════════════════════════════════════════════════════
+
+import BroadcastStream from '../models/BroadcastStream.js';
+
+/**
+ * Get current stream status for a channel
+ * GET /api/broadcast/stream/:channel
+ */
+export const getStreamStatus = async (req, res) => {
+  try {
+    const { channel } = req.params;
+
+    let stream = await BroadcastStream.findOne({ channel });
+
+    // Create default if doesn't exist
+    if (!stream) {
+      stream = await BroadcastStream.create({ channel });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        channel: stream.channel,
+        youtubeVideoId: stream.youtubeVideoId,
+        streamTitle: stream.streamTitle,
+        isLive: stream.isLive,
+        viewerCount: stream.viewerCount,
+        startedAt: stream.startedAt,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: { message: error.message || 'Failed to get stream status' },
+    });
+  }
+};
+
+/**
+ * Update YouTube video ID for a channel (Admin only)
+ * PUT /api/broadcast/admin/stream/:channel
+ * Body: { youtubeVideoId, streamTitle }
+ */
+export const updateStreamUrl = async (req, res) => {
+  try {
+    const { channel } = req.params;
+    const { youtubeVideoId, streamTitle } = req.body;
+
+    if (!youtubeVideoId) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'YouTube video ID is required' },
+      });
+    }
+
+    let stream = await BroadcastStream.findOne({ channel });
+
+    if (!stream) {
+      stream = await BroadcastStream.create({
+        channel,
+        youtubeVideoId,
+        streamTitle: streamTitle || '',
+      });
+    } else {
+      stream.youtubeVideoId = youtubeVideoId;
+      stream.streamTitle = streamTitle || stream.streamTitle;
+      await stream.save();
+    }
+
+    res.json({
+      success: true,
+      data: {
+        channel: stream.channel,
+        youtubeVideoId: stream.youtubeVideoId,
+        streamTitle: stream.streamTitle,
+        message: 'Stream URL updated successfully',
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: { message: error.message || 'Failed to update stream URL' },
+    });
+  }
+};
+
+/**
+ * Start stream (mark as live)
+ * POST /api/broadcast/admin/stream/:channel/start
+ */
+export const startStream = async (req, res) => {
+  try {
+    const { channel } = req.params;
+
+    let stream = await BroadcastStream.findOne({ channel });
+
+    if (!stream) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'Stream not configured. Please add YouTube video ID first.' },
+      });
+    }
+
+    if (!stream.youtubeVideoId) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'No YouTube video ID set for this channel' },
+      });
+    }
+
+    stream.isLive = true;
+    stream.startedAt = new Date();
+    stream.endedAt = null;
+    stream.viewerCount = 0;
+    await stream.save();
+
+    res.json({
+      success: true,
+      data: {
+        channel: stream.channel,
+        isLive: true,
+        startedAt: stream.startedAt,
+        message: 'Stream started successfully',
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: { message: error.message || 'Failed to start stream' },
+    });
+  }
+};
+
+/**
+ * Stop stream (mark as ended)
+ * POST /api/broadcast/admin/stream/:channel/stop
+ */
+export const stopStream = async (req, res) => {
+  try {
+    const { channel } = req.params;
+
+    let stream = await BroadcastStream.findOne({ channel });
+
+    if (!stream) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'Stream not found' },
+      });
+    }
+
+    stream.isLive = false;
+    stream.endedAt = new Date();
+    if (stream.viewerCount > stream.peakViewers) {
+      stream.peakViewers = stream.viewerCount;
+    }
+    await stream.save();
+
+    res.json({
+      success: true,
+      data: {
+        channel: stream.channel,
+        isLive: false,
+        endedAt: stream.endedAt,
+        peakViewers: stream.peakViewers,
+        message: 'Stream stopped successfully',
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: { message: error.message || 'Failed to stop stream' },
+    });
+  }
+};
