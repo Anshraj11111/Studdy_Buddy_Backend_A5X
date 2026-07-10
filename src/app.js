@@ -205,21 +205,66 @@ app.get('/ping', (req, res) => res.status(200).json({ ok: true }));
 
 app.get('/health/db', async (req, res) => {
   try {
-    const mongoose = await import('mongoose');
-    const mongooseConnection = mongoose.connection;
-    if (mongooseConnection.readyState === 1) {
-      res.status(200).json({
-        success: true,
-        message: 'Database is healthy',
-        database: 'MongoDB',
-        readyState: mongooseConnection.readyState,
-      });
+    // Check multi-database mode
+    const isMultiDbMode = process.env.MONGO_URI_PRIMARY || 
+                          process.env.MONGO_URI_SECONDARY || 
+                          process.env.MONGO_URI_TERTIARY;
+
+    if (isMultiDbMode) {
+      // Multi-database health check
+      const { getConnection } = await import('./config/db-multi.js');
+      const primaryConn = getConnection('primary');
+      const secondaryConn = getConnection('secondary');
+      const tertiaryConn = getConnection('tertiary');
+
+      const allConnected = 
+        primaryConn?.readyState === 1 &&
+        secondaryConn?.readyState === 1 &&
+        tertiaryConn?.readyState === 1;
+
+      if (allConnected) {
+        res.status(200).json({
+          success: true,
+          message: 'All databases are healthy',
+          mode: 'multi-database',
+          databases: {
+            primary: { status: 'connected', readyState: primaryConn.readyState },
+            secondary: { status: 'connected', readyState: secondaryConn.readyState },
+            tertiary: { status: 'connected', readyState: tertiaryConn.readyState },
+          },
+        });
+      } else {
+        res.status(503).json({
+          success: false,
+          message: 'One or more databases are not connected',
+          mode: 'multi-database',
+          databases: {
+            primary: { status: primaryConn?.readyState === 1 ? 'connected' : 'disconnected', readyState: primaryConn?.readyState },
+            secondary: { status: secondaryConn?.readyState === 1 ? 'connected' : 'disconnected', readyState: secondaryConn?.readyState },
+            tertiary: { status: tertiaryConn?.readyState === 1 ? 'connected' : 'disconnected', readyState: tertiaryConn?.readyState },
+          },
+        });
+      }
     } else {
-      res.status(503).json({
-        success: false,
-        message: 'Database connection failed',
-        readyState: mongooseConnection.readyState,
-      });
+      // Single database health check
+      const mongoose = await import('mongoose');
+      const mongooseConnection = mongoose.connection;
+      if (mongooseConnection.readyState === 1) {
+        res.status(200).json({
+          success: true,
+          message: 'Database is healthy',
+          mode: 'single-database',
+          database: 'MongoDB',
+          readyState: mongooseConnection.readyState,
+        });
+      } else {
+        res.status(503).json({
+          success: false,
+          message: 'Database connection failed',
+          mode: 'single-database',
+          readyState: mongooseConnection.readyState,
+        });
+      }
     }
   } catch (error) {
     logger.error('Database health check failed', { error: error.message });

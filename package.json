@@ -7,7 +7,12 @@
     "dev": "nodemon server.js",
     "start": "node server.js",
     "test": "jest --coverage",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "test:multidb": "node test-multidb.js",
+    "test:api": "node test-quick-api.js",
+    "test:youtube": "node test-youtube-unlimited-viewers.js",
+    "test:load": "node test-load-10k-users.js",
+    "test:all": "node run-all-tests.js"
   },
   "keywords": [
     "studdy-buddy",
