@@ -6,12 +6,13 @@ import { createAdapter } from '@socket.io/redis-adapter';
 import mongoose from 'mongoose';
 import app from './src/app.js';
 import connectDB from './src/config/db.js';
-import { connectAllDatabases } from './src/config/db-multi.js';
+import { connectAllDatabases, connectionOptions } from './src/config/db-multi.js';
 import connectRedis from './src/config/redis.js';
 import setupChatSocket from './src/sockets/chat.socket.js';
 import setupVideoSocket from './src/sockets/video.socket.js';
 import setupGeneralGroupSocket from './src/sockets/generalGroup.socket.js';
 import setupBroadcastSocket from './src/sockets/broadcast.socket.js';
+import { setupSchoolChannelSocket } from './src/sockets/schoolChannel.socket.js';
 import logger from './src/utils/logger.js';
 import chatRoutes from "./src/routes/chatRoute.js";
 
@@ -73,6 +74,7 @@ setupChatSocket(io);
 setupVideoSocket(io);
 setupGeneralGroupSocket(io);
 setupBroadcastSocket(io);
+setupSchoolChannelSocket(io);
 
 // Make io accessible in routes via req.app.get('io')
 app.set('io', io);
@@ -87,6 +89,13 @@ const startServer = async () => {
 
     if (isMultiDbMode) {
       console.log('🚀 Multi-database mode detected - connecting to 3 clusters...');
+      
+      // CRITICAL FIX: Connect mongoose default connection to PRIMARY first
+      // This ensures all models use primary DB by default
+      await mongoose.connect(process.env.MONGO_URI_PRIMARY, connectionOptions);
+      console.log('✅ Mongoose default connection set to PRIMARY DB');
+      
+      // Then connect other databases
       await connectAllDatabases();
     } else {
       console.log('📦 Single database mode - connecting to MongoDB...');

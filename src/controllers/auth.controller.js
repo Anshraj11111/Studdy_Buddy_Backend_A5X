@@ -6,7 +6,7 @@ import authService from '../services/auth.service.js';
  */
 export const register = async (req, res) => {
   try {
-    const { name, email, password, role, skills, mentorCode } = req.body;
+    const { name, email, password, role, skills, mentorCode, schoolName, city } = req.body;
 
     // Input validation
     if (!name || !email || !password) {
@@ -27,6 +27,19 @@ export const register = async (req, res) => {
           code: 'VALIDATION_ERROR',
         },
       });
+    }
+
+    // Validate school info for students
+    if (role === 'student' || !role) {
+      if (!schoolName || !city) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            message: 'Please provide school name and city',
+            code: 'VALIDATION_ERROR',
+          },
+        });
+      }
     }
 
     // Validate mentor code if role is mentor
@@ -51,6 +64,8 @@ export const register = async (req, res) => {
       role,
       skills,
       mentorCode: role === 'mentor' ? mentorCode : null,
+      schoolName: role === 'student' || !role ? schoolName : null,
+      city: role === 'student' || !role ? city : null,
     });
 
     // Generate token

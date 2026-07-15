@@ -19,6 +19,7 @@ import { io } from 'socket.io-client';
 // ═══════════════════════════════════════════════════════════════════════════
 
 const BACKEND_URLS = [
+  'https://studdy-buddy-backend-a5x.onrender.com',
   'https://studdy-buddy-backend-a5x-ytip.onrender.com',
   'https://studdy-buddy-backend-a5x-2dn7.onrender.com'
 ];

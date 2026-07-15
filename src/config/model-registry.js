@@ -20,16 +20,17 @@ export const MODEL_DATABASE_MAP = {
   MentorRequest: 'primary',
   
   // ═══════════════════════════════════════════════════════════════
-  // SECONDARY DATABASE (Content, learning materials)
+  // SECONDARY DATABASE (Content, learning materials, school channels)
   // ═══════════════════════════════════════════════════════════════
   Doubt: 'secondary',
   Resource: 'secondary',
   Playlist: 'secondary',
   Post: 'secondary',
   FeedPost: 'secondary',
+  SchoolChannel: 'secondary',
   
   // ═══════════════════════════════════════════════════════════════
-  // TERTIARY DATABASE (Real-time, messaging, broadcasts)
+  // TERTIARY DATABASE (Real-time, messaging, broadcasts, school messages)
   // ═══════════════════════════════════════════════════════════════
   Message: 'tertiary',
   GroupMessage: 'tertiary',
@@ -41,6 +42,7 @@ export const MODEL_DATABASE_MAP = {
   BroadcastCode: 'tertiary',
   BroadcastEnrollment: 'tertiary',
   BroadcastJoinRequest: 'tertiary',
+  SchoolChannelMessage: 'tertiary',
 };
 
 /**

@@ -10,6 +10,8 @@
     "test:watch": "jest --watch",
     "test:multidb": "node test-multidb.js",
     "test:api": "node test-quick-api.js",
+    "test:api:100": "node test-quick-api-100percent.js",
+    "test:production": "node test-production-ready.js",
     "test:youtube": "node test-youtube-unlimited-viewers.js",
     "test:load": "node test-load-10k-users.js",
     "test:all": "node run-all-tests.js"

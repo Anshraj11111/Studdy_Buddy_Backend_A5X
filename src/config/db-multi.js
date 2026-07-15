@@ -11,7 +11,7 @@ import mongoose from "mongoose";
 
 const connections = {};
 
-const connectionOptions = {
+export const connectionOptions = {
   maxPoolSize: 100,  // Increased from 20 for better concurrency
   minPoolSize: 10,
   serverSelectionTimeoutMS: 30000,
@@ -80,8 +80,7 @@ export const connectAllDatabases = async () => {
       console.log('   MONGO_URI_SECONDARY=... (Doubts, Resources)');
       console.log('   MONGO_URI_TERTIARY=... (Messages, Broadcasts)');
       
-      // Fallback to single database
-      const singleConn = await mongoose.connect(process.env.MONGO_URI, connectionOptions);
+      // Fallback to single database - mongoose.connection is already connected from server.js
       connections.primary = mongoose.connection;
       connections.secondary = mongoose.connection;
       connections.tertiary = mongoose.connection;
@@ -89,11 +88,13 @@ export const connectAllDatabases = async () => {
       return;
     }
 
-    console.log('🚀 Multi-database mode enabled - connecting to 3 clusters...');
+    console.log('🚀 Multi-database mode enabled - connecting to additional DBs...');
 
-    // Connect to all 3 databases in parallel
+    // Primary is already connected via mongoose.connect() in server.js
+    connections.primary = mongoose.connection;
+
+    // Connect secondary and tertiary in parallel
     await Promise.all([
-      connectDatabase('primary', process.env.MONGO_URI_PRIMARY),
       connectDatabase('secondary', process.env.MONGO_URI_SECONDARY),
       connectDatabase('tertiary', process.env.MONGO_URI_TERTIARY),
     ]);
@@ -112,11 +113,12 @@ export const connectAllDatabases = async () => {
  * @param {string} name - primary, secondary, or tertiary
  */
 export const getConnection = (name = 'primary') => {
-  if (!connections[name]) {
-    console.warn(`⚠️ ${name} connection not found, using primary`);
-    return connections.primary || mongoose.connection;
+  const conn = connections[name];
+  if (!conn) {
+    console.warn(`⚠️ ${name} connection not found, returning default mongoose connection`);
+    return mongoose.connection;
   }
-  return connections[name];
+  return conn;
 };
 
 /**

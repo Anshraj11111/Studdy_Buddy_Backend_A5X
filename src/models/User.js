@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { getConnection } from '../config/db-multi.js';
 
 const userSchema = new mongoose.Schema(
   {
@@ -107,6 +108,17 @@ const userSchema = new mongoose.Schema(
       endYear: { type: String, default: '' },
       description: { type: String, default: '', maxlength: [500, 'Description too long'] },
     },
+    // School-specific fields (required for students)
+    schoolName: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    city: {
+      type: String,
+      default: '',
+      trim: true,
+    },
     // Mentor: professional experience
     experience: {
       company: { type: String, default: '' },
@@ -149,7 +161,29 @@ userSchema.index({ 'skills': 1 });                 // Search by skills
 userSchema.index({ createdAt: -1 });               // Recent users
 userSchema.index({ isActive: 1, role: 1 });        // Active users by role
 userSchema.index({ mentorCode: 1 }, { sparse: true }); // Mentor lookup
+userSchema.index({ schoolName: 1, city: 1 });      // School-based filtering
 
-const User = mongoose.model('User', userSchema);
+// Lazy model creation - wait for connection to be ready
+let User;
 
-export default User;
+const getUserModel = () => {
+  if (User) return User;
+  
+  try {
+    const conn = getConnection('primary');
+    if (conn && conn.readyState === 1) {
+      User = conn.model('User', userSchema);
+    } else {
+      // Fallback to default if connection not ready
+      User = mongoose.model('User', userSchema);
+    }
+  } catch (error) {
+    // Fallback to default mongoose connection
+    User = mongoose.model('User', userSchema);
+  }
+  
+  return User;
+};
+
+// Export the model getter
+export default getUserModel();

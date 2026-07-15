@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
+import SchoolChannel from '../models/SchoolChannel.js';
 
 class AuthService {
   /**
@@ -10,7 +11,7 @@ class AuthService {
    */
   async register(userData) {
     try {
-      const { name, email, password, role, skills, mentorCode } = userData;
+      const { name, email, password, role, skills, mentorCode, schoolName, city } = userData;
 
       // Check if user already exists
       const existingUser = await User.findOne({ email });
@@ -29,11 +30,61 @@ class AuthService {
         role: role || 'student',
         skills: skills || [],
         mentorCode: mentorCode || null,
+        schoolName: schoolName || '',
+        city: city || '',
       });
+
+      // Auto-join school channel for students (only if channel exists)
+      if ((role === 'student' || !role) && schoolName && city) {
+        await this.autoJoinSchoolChannel(user);
+      }
 
       return user;
     } catch (error) {
       throw error;
+    }
+  }
+
+  /**
+   * Auto-join user to their school channel (only if channel exists)
+   * @param {Object} user - User object
+   * @returns {Promise<void>}
+   */
+  async autoJoinSchoolChannel(user) {
+    try {
+      if (!user.schoolName || !user.city) {
+        console.log(`⚠️ User ${user.name} has no school info - cannot auto-join`);
+        return;
+      }
+
+      const channelId = SchoolChannel.generateChannelId(user.schoolName, user.city);
+      console.log(`🔍 Looking for channel with ID: ${channelId} for user ${user.name} (school: ${user.schoolName}, city: ${user.city})`);
+
+      // Find existing school channel (DO NOT CREATE automatically)
+      const channel = await SchoolChannel.findOne({ channelId });
+
+      if (channel) {
+        // Add user to existing channel if not already a member
+        if (!channel.members.includes(user._id)) {
+          channel.members.push(user._id);
+          channel.stats.totalMembers = channel.members.length;
+          channel.stats.lastActivityAt = new Date();
+          await channel.save();
+          console.log(`✅ Student ${user.name} auto-joined channel: ${channelId} (${channel.schoolName}, ${channel.city})`);
+        } else {
+          console.log(`ℹ️ Student ${user.name} already a member of channel: ${channelId}`);
+        }
+      } else {
+        // Channel doesn't exist - student will see "no channel" message
+        console.log(`⚠️ No channel exists for channelId: ${channelId} (${user.schoolName}, ${user.city}) - student ${user.name} cannot join`);
+        
+        // List all available channels for debugging
+        const allChannels = await SchoolChannel.find({}).select('channelId schoolName city').lean();
+        console.log(`📋 Available channels:`, allChannels.map(c => `${c.channelId} (${c.schoolName}, ${c.city})`));
+      }
+    } catch (error) {
+      console.error('Error auto-joining school channel:', error);
+      // Don't throw error to prevent registration failure
     }
   }
 
@@ -47,7 +98,7 @@ class AuthService {
     try {
       // Find user by email - select only needed fields
       const user = await User.findOne({ email })
-        .select('_id name email role skills profileImage bannerImage headline bio address socialLinks education experience xp mentorCode password')
+        .select('_id name email role skills profileImage bannerImage headline bio address socialLinks education experience xp mentorCode password schoolName city')
         .lean();
       if (!user) {
         throw new Error('Invalid credentials');
@@ -59,16 +110,20 @@ class AuthService {
         throw new Error('Invalid credentials');
       }
 
+      // Auto-join school channel for students (if not already joined)
+      if ((user.role === 'student' || !user.role) && user.schoolName && user.city) {
+        // Convert lean object to mongoose document for auto-join
+        const userDoc = await User.findById(user._id);
+        await this.autoJoinSchoolChannel(userDoc);
+      }
+
+      // Remove password from response
+      delete user.password;
+
       // Generate JWT token
       const token = this.generateToken(user._id);
 
-      // Remove password from user object
-      const { password: _, ...userWithoutPassword } = user;
-
-      return {
-        user: userWithoutPassword,
-        token,
-      };
+      return { user, token };
     } catch (error) {
       throw error;
     }

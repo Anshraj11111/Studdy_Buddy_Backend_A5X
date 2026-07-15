@@ -20,6 +20,7 @@ import rewardsRoutes from './routes/rewards.routes.js';
 import generalGroupRoutes from './routes/generalGroup.routes.js';
 import broadcastRoutes from './routes/broadcast.routes.js';
 import playlistRoutes from './routes/playlist.routes.js';
+import schoolChannelRoutes from './routes/schoolChannel.routes.js';
 import { errorHandler } from './middleware/error.middleware.js';
 import { requestLogger } from './middleware/request-logger.middleware.js';
 import logger from './utils/logger.js';
@@ -321,6 +322,7 @@ app.use('/api/rewards', rewardsRoutes);
 app.use('/api/general-group', generalGroupRoutes);
 app.use('/api/broadcast', broadcastRoutes);
 app.use('/api/playlists', playlistRoutes);
+app.use('/api/school-channel', schoolChannelRoutes);
 
 // 404 handler
 app.use((req, res) => {
