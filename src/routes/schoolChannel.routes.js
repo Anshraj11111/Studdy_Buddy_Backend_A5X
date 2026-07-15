@@ -30,6 +30,7 @@ router.post('/messages/:messageId/react', schoolChannelController.addReaction);
 
 // Admin routes - must be admin/mentor
 router.get('/admin/all', schoolChannelController.getAllChannels);
+router.get('/admin/:id/members', schoolChannelController.getChannelMembersAdmin);
 router.post('/admin/create', schoolChannelController.createChannel);
 router.delete('/admin/:id', schoolChannelController.deleteChannel);
 

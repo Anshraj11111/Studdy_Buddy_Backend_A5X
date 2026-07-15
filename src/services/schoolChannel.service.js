@@ -252,6 +252,33 @@ class SchoolChannelService {
 
       return channelsWithCount;
     } catch (error) {
+      console.error('Error in getAllChannels:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get channel members by channel ID (admin only)
+   * @param {string} channelId - Channel ID
+   * @returns {Promise<Array>} Array of member details
+   */
+  async getChannelMembersById(channelId) {
+    try {
+      const channel = await SchoolChannel.findById(channelId);
+      if (!channel) {
+        throw new Error('Channel not found');
+      }
+
+      const members = await User.find({
+        _id: { $in: channel.members }
+      })
+        .select('name email profileImage role xp schoolName city createdAt')
+        .sort({ createdAt: -1 })
+        .lean();
+
+      return members;
+    } catch (error) {
+      console.error('Error in getChannelMembersById:', error);
       throw error;
     }
   }

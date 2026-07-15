@@ -284,10 +284,36 @@ export const getAllChannels = async (req, res) => {
       channels,
     });
   } catch (error) {
+    console.error('Error fetching all channels:', error);
     res.status(500).json({
       success: false,
       error: {
         message: 'Failed to fetch channels',
+        code: 'SERVER_ERROR',
+      },
+    });
+  }
+};
+
+/**
+ * Get channel members with full details (admin only)
+ * GET /api/school-channel/admin/:id/members
+ */
+export const getChannelMembersAdmin = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const members = await schoolChannelService.getChannelMembersById(id);
+
+    res.status(200).json({
+      success: true,
+      members,
+    });
+  } catch (error) {
+    console.error('Error fetching channel members:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Failed to fetch members',
         code: 'SERVER_ERROR',
       },
     });
@@ -386,6 +412,7 @@ export default {
   pinMessage,
   addReaction,
   getAllChannels,
+  getChannelMembersAdmin,
   createChannel,
   deleteChannel,
 };
