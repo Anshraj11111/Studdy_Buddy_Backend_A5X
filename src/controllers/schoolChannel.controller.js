@@ -111,6 +111,16 @@ export const sendMessage = async (req, res) => {
       });
     }
 
+    if (error.message === 'Only the channel admin can post messages') {
+      return res.status(403).json({
+        success: false,
+        error: {
+          message: error.message,
+          code: 'ADMIN_ONLY',
+        },
+      });
+    }
+
     if (error.message === 'Only admins can post in this channel') {
       return res.status(403).json({
         success: false,
@@ -403,6 +413,110 @@ export const deleteChannel = async (req, res) => {
   }
 };
 
+/**
+ * Broadcast message to multiple channels (admin only)
+ * POST /api/school-channel/admin/broadcast
+ */
+export const broadcastMessage = async (req, res) => {
+  try {
+    const { message, channelIds } = req.body;
+
+    if (!message || !channelIds || channelIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: 'Message and channel IDs are required',
+          code: 'VALIDATION_ERROR',
+        },
+      });
+    }
+
+    const result = await schoolChannelService.broadcastMessage(req.user._id, message, channelIds);
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    console.error('Error broadcasting message:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Failed to broadcast message',
+        code: 'SERVER_ERROR',
+      },
+    });
+  }
+};
+
+/**
+ * Get all messages from all channels (admin only)
+ * GET /api/school-channel/admin/messages
+ */
+export const getAllMessages = async (req, res) => {
+  try {
+    const { channelId, limit, skip, search, dateFrom, dateTo } = req.query;
+
+    const result = await schoolChannelService.getAllMessagesAdmin({
+      channelId,
+      limit: limit ? parseInt(limit) : 100,
+      skip: skip ? parseInt(skip) : 0,
+      search,
+      dateFrom,
+      dateTo,
+    });
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    console.error('Error fetching all messages:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Failed to fetch messages',
+        code: 'SERVER_ERROR',
+      },
+    });
+  }
+};
+
+/**
+ * Delete any message as admin
+ * DELETE /api/school-channel/admin/messages/:messageId
+ */
+export const deleteMessageAdmin = async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const message = await schoolChannelService.deleteMessageAdmin(messageId, req.user._id);
+
+    res.status(200).json({
+      success: true,
+      data: { message },
+    });
+  } catch (error) {
+    if (error.message === 'Message not found') {
+      return res.status(404).json({
+        success: false,
+        error: {
+          message: error.message,
+          code: 'MESSAGE_NOT_FOUND',
+        },
+      });
+    }
+
+    console.error('Error deleting message:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Failed to delete message',
+        code: 'SERVER_ERROR',
+      },
+    });
+  }
+};
+
 export default {
   getUserChannel,
   getMessages,
@@ -415,4 +529,7 @@ export default {
   getChannelMembersAdmin,
   createChannel,
   deleteChannel,
+  broadcastMessage,
+  getAllMessages,
+  deleteMessageAdmin,
 };

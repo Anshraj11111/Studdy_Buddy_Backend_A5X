@@ -81,9 +81,9 @@ class SchoolChannelService {
         throw new Error('You are not a member of this channel');
       }
 
-      // Check if students can post
-      if (user.role === 'student' && !channel.settings.studentsCanPost) {
-        throw new Error('Only admins can post in this channel');
+      // Only channel creator (admin) can post messages
+      if (channel.createdBy.toString() !== userId) {
+        throw new Error('Only the channel admin can post messages');
       }
 
       // Create message
@@ -357,6 +357,142 @@ class SchoolChannelService {
       // Delete the channel
       await SchoolChannel.findByIdAndDelete(channelId);
     } catch (error) {
+      throw error;
+    }
+  }
+  /**
+   * Broadcast message to multiple channels (admin only)
+   * @param {string} adminId - Admin user ID
+   * @param {string} message - Message content
+   * @param {Array} channelIds - Array of channel IDs
+   * @returns {Promise<Object>} Broadcast result
+   */
+  async broadcastMessage(adminId, message, channelIds) {
+    try {
+      const results = [];
+      
+      for (const channelId of channelIds) {
+        try {
+          const channel = await SchoolChannel.findById(channelId);
+          
+          if (!channel) {
+            results.push({ channelId, success: false, error: 'Channel not found' });
+            continue;
+          }
+
+          // Create message
+          const newMessage = await SchoolChannelMessage.create({
+            channelId: channel.channelId,
+            channel: channel._id,
+            sender: adminId,
+            content: message,
+            messageType: 'text',
+            attachments: [],
+            isPinned: false,
+          });
+
+          // Update channel stats
+          await SchoolChannel.findByIdAndUpdate(channel._id, {
+            'stats.totalMessages': channel.stats.totalMessages + 1,
+            'stats.lastActivityAt': new Date(),
+          });
+
+          results.push({ 
+            channelId, 
+            channelName: `${channel.schoolName} (${channel.city})`,
+            success: true,
+            messageId: newMessage._id
+          });
+        } catch (error) {
+          console.error(`Error broadcasting to channel ${channelId}:`, error);
+          results.push({ channelId, success: false, error: error.message });
+        }
+      }
+
+      const successCount = results.filter(r => r.success).length;
+      const failureCount = results.filter(r => !r.success).length;
+
+      return {
+        total: channelIds.length,
+        success: successCount,
+        failed: failureCount,
+        results
+      };
+    } catch (error) {
+      console.error('Error in broadcastMessage:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get all messages across all channels (admin only)
+   * @param {Object} filters - Filter options
+   * @returns {Promise<Object>} Messages with metadata
+   */
+  async getAllMessagesAdmin(filters = {}) {
+    try {
+      const { channelId, limit = 100, skip = 0, search, dateFrom, dateTo } = filters;
+
+      // Build query
+      const query = { isDeleted: false };
+
+      if (channelId) {
+        query.channel = channelId;
+      }
+
+      if (search) {
+        query.content = { $regex: search, $options: 'i' };
+      }
+
+      if (dateFrom || dateTo) {
+        query.createdAt = {};
+        if (dateFrom) query.createdAt.$gte = new Date(dateFrom);
+        if (dateTo) query.createdAt.$lte = new Date(dateTo);
+      }
+
+      // Fetch messages with channel and sender info
+      const messages = await SchoolChannelMessage.find(query)
+        .sort({ createdAt: -1 })
+        .limit(limit)
+        .skip(skip)
+        .populate('sender', 'name email profileImage role')
+        .populate('channel', 'schoolName city channelId')
+        .lean();
+
+      const total = await SchoolChannelMessage.countDocuments(query);
+
+      return {
+        messages,
+        total,
+        limit,
+        skip,
+        hasMore: skip + messages.length < total
+      };
+    } catch (error) {
+      console.error('Error in getAllMessagesAdmin:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete any message (admin only)
+   * @param {string} messageId - Message ID
+   * @param {string} adminId - Admin user ID
+   * @returns {Promise<Object>} Deleted message
+   */
+  async deleteMessageAdmin(messageId, adminId) {
+    try {
+      const message = await SchoolChannelMessage.findById(messageId);
+      if (!message) {
+        throw new Error('Message not found');
+      }
+
+      message.isDeleted = true;
+      await message.save();
+
+      return message;
+    } catch (error) {
+      console.error('Error in deleteMessageAdmin:', error);
       throw error;
     }
   }

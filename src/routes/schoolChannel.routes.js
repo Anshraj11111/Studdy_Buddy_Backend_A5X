@@ -32,6 +32,11 @@ router.post('/messages/:messageId/react', schoolChannelController.addReaction);
 router.get('/admin/all', schoolChannelController.getAllChannels);
 router.get('/admin/:id/members', schoolChannelController.getChannelMembersAdmin);
 router.post('/admin/create', schoolChannelController.createChannel);
+router.post('/admin/broadcast', schoolChannelController.broadcastMessage);
 router.delete('/admin/:id', schoolChannelController.deleteChannel);
+
+// Admin message monitoring routes
+router.get('/admin/messages/all', schoolChannelController.getAllMessages);
+router.delete('/admin/messages/:messageId', schoolChannelController.deleteMessageAdmin);
 
 export default router;

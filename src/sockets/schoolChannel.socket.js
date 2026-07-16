@@ -51,9 +51,9 @@ export const setupSchoolChannelSocket = (io) => {
           return;
         }
 
-        // Check if students can post
-        if (user.role === 'student' && !channel.settings.studentsCanPost) {
-          socket.emit('school-channel:error', { message: 'Only admins can post' });
+        // Only channel creator (admin) can post messages
+        if (channel.createdBy.toString() !== userId) {
+          socket.emit('school-channel:error', { message: 'Only the channel admin can post messages' });
           return;
         }
 
