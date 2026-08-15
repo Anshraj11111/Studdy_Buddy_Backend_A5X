@@ -12,18 +12,32 @@ import mongoose from "mongoose";
 const connections = {};
 
 export const connectionOptions = {
-  maxPoolSize: 100,  // Increased from 20 for better concurrency
-  minPoolSize: 10,
-  serverSelectionTimeoutMS: 30000,
-  socketTimeoutMS: 45000,
-  connectTimeoutMS: 30000,
-  family: 4,
-  retryWrites: true,
-  w: 'majority',
-  heartbeatFrequencyMS: 10000,
-  maxIdleTimeMS: 30000,
-  compressors: ['zlib'],  // Enable compression
-  zlibCompressionLevel: 6,
+  // ── Optimized for 10K Users (3 Servers) ──────────────────────────────────
+  maxPoolSize: 80,           // 80 connections per DB (each server uses ~25-30)
+  minPoolSize: 5,            // Keep minimum connections ready
+  
+  // ── Timeouts (Production-optimized) ───────────────────────────────────────
+  serverSelectionTimeoutMS: 15000,  // Faster timeout for server selection
+  socketTimeoutMS: 45000,           // Socket timeout
+  connectTimeoutMS: 20000,          // Connection timeout
+  
+  // ── Performance Optimizations ─────────────────────────────────────────────
+  family: 4,                 // Force IPv4 (faster than IPv6)
+  retryWrites: true,         // Auto-retry failed writes
+  w: 'majority',             // Write concern: majority nodes
+  readPreference: 'nearest', // Read from nearest server (low latency)
+  
+  // ── Health Checks & Keep-Alive ────────────────────────────────────────────
+  heartbeatFrequencyMS: 5000,  // Check health every 5 seconds
+  maxIdleTimeMS: 60000,        // Close idle connections after 60s
+  
+  // ── Compression (Reduce bandwidth) ────────────────────────────────────────
+  compressors: ['zlib'],     // Enable compression
+  zlibCompressionLevel: 6,   // Balanced compression (1-9, 6 is good)
+  
+  // ── Query Performance ─────────────────────────────────────────────────────
+  autoIndex: false,          // Don't auto-create indexes (do manually)
+  bufferCommands: false,     // Fail fast if not connected
 };
 
 /**

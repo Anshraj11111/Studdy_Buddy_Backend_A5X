@@ -69,33 +69,40 @@ app.use(
 );
 
 // Body parsing middleware with size limits
-app.use(express.json({ limit: '20mb' }));
-app.use(express.urlencoded({ limit: '20mb', extended: true }));
+app.use(express.json({ limit: '10mb' }));   // Reduced from 20mb for performance
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // Request logging
 app.use(requestLogger);
 
-// Rate limiting middleware
+// Rate limiting middleware - OPTIMIZED FOR 10K USERS
 const limiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100,
+  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,  // 15 minutes
+  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 200,                // 200 requests per 15 min
   message: 'Too many requests from this IP, please try again later.',
   standardHeaders: true,
   legacyHeaders: false,
+  // Use Redis for distributed rate limiting if available
+  store: process.env.REDIS_URL ? undefined : undefined, // TODO: Add Redis store
 });
 
 const authLimiter = rateLimit({
-  windowMs: parseInt(process.env.AUTH_RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
-  max: parseInt(process.env.AUTH_RATE_LIMIT_MAX_REQUESTS) || 5,
+  windowMs: parseInt(process.env.AUTH_RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,  // 15 minutes
+  max: parseInt(process.env.AUTH_RATE_LIMIT_MAX_REQUESTS) || 10,                 // 10 login attempts
   message: 'Too many authentication attempts, please try again later.',
   skipSuccessfulRequests: true,
   standardHeaders: true,
   legacyHeaders: false,
 });
 
-// Apply rate limiting - TEMPORARILY DISABLED FOR TESTING
-// app.use('/api/', limiter);
-// app.use('/api/auth/', authLimiter);
+// Apply rate limiting in production
+if (process.env.NODE_ENV === 'production') {
+  app.use('/api/', limiter);
+  app.use('/api/auth/', authLimiter);
+  console.log('✅ Rate limiting enabled for production');
+} else {
+  console.log('⚠️ Rate limiting disabled in development');
+}
 
 // ── ICE / TURN server config ──────────────────────────────────────────────
 app.get('/api/ice-servers', async (req, res) => {
@@ -203,6 +210,27 @@ app.get('/health', (req, res) => {
 
 // Keep-alive ping — separate from /health so ad blockers don't interfere
 app.get('/ping', (req, res) => res.status(200).json({ ok: true }));
+
+// ── Performance Stats Endpoint (10K Users Monitoring) ────────────────────────
+app.get('/health/performance', async (req, res) => {
+  try {
+    const { getPerformanceStats } = await import('./utils/performance.js');
+    const stats = getPerformanceStats();
+    
+    res.status(200).json({
+      success: true,
+      performance: stats,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    logger.error('Performance stats failed', { error: error.message });
+    res.status(500).json({
+      success: false,
+      message: 'Performance stats unavailable',
+      error: error.message,
+    });
+  }
+});
 
 app.get('/health/db', async (req, res) => {
   try {
