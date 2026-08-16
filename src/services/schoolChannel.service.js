@@ -19,13 +19,36 @@ class SchoolChannelService {
         throw new Error('User has no school information');
       }
 
+      // Try to find channel by channelId first (exact match)
       const channelId = SchoolChannel.generateChannelId(user.schoolName, user.city);
-      const channel = await SchoolChannel.findOne({ channelId })
+      let channel = await SchoolChannel.findOne({ channelId })
         .populate('createdBy', 'name email profileImage')
         .lean();
 
+      // If not found by channelId, try case-insensitive search on schoolName and city
+      if (!channel) {
+        channel = await SchoolChannel.findOne({
+          schoolName: { $regex: new RegExp(`^${user.schoolName.trim()}$`, 'i') },
+          city: { $regex: new RegExp(`^${user.city.trim()}$`, 'i') },
+        })
+          .populate('createdBy', 'name email profileImage')
+          .lean();
+      }
+
       if (!channel) {
         throw new Error('School channel not found');
+      }
+
+      // Auto-add user to channel if not already a member
+      if (!channel.members.some(m => m.toString() === userId)) {
+        await SchoolChannel.findByIdAndUpdate(channel._id, {
+          $addToSet: { members: userId },
+          $inc: { 'stats.totalMembers': 1 },
+        });
+        // Reload channel to get updated members
+        channel = await SchoolChannel.findById(channel._id)
+          .populate('createdBy', 'name email profileImage')
+          .lean();
       }
 
       return channel;

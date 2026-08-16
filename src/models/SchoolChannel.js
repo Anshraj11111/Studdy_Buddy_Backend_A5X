@@ -78,8 +78,13 @@ schoolChannelSchema.statics.generateChannelId = function(schoolName, city) {
 
 // Method to check if a user can join this channel
 schoolChannelSchema.methods.canUserJoin = function(user) {
-  // User must have matching school name and city
-  return user.schoolName === this.schoolName && user.city === this.city;
+  // User must have matching school name and city (case-insensitive comparison)
+  const userSchool = (user.schoolName || '').trim().toLowerCase();
+  const channelSchool = (this.schoolName || '').trim().toLowerCase();
+  const userCity = (user.city || '').trim().toLowerCase();
+  const channelCity = (this.city || '').trim().toLowerCase();
+  
+  return userSchool === channelSchool && userCity === channelCity;
 };
 
 // Get the appropriate database connection (secondary for SchoolChannel)
