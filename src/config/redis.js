@@ -4,49 +4,60 @@ let redisClient = null;
 
 const connectRedis = async () => {
   try {
-    // For production with 10K users, use Redis for:
+    // Skip Redis in development if URL is localhost (optional)
+    const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+    const isLocalhost = redisUrl.includes('localhost') || redisUrl.includes('127.0.0.1');
+    
+    if (isLocalhost && process.env.NODE_ENV === 'development') {
+      console.log('ℹ️  Redis skipped in development (localhost not available)');
+      console.log('💡 For production: Add Upstash Redis URL to environment variables');
+      console.log('   Visit: https://upstash.com (FREE 10K commands/day)');
+      return null;
+    }
+
+    // For production with 10K users, Redis enables:
     // 1. Session storage
-    // 2. Socket.IO adapter (multi-server)
+    // 2. Socket.IO adapter (multi-server scaling)
     // 3. Rate limiting
     // 4. Caching frequent queries
     
     const redisConfig = {
-      url: process.env.REDIS_URL || 'redis://localhost:6379',
+      url: redisUrl,
       socket: {
         reconnectStrategy: (retries) => {
-          if (retries > 5) {
-            console.warn('⚠️ Redis reconnection failed after 5 attempts');
-            return false; // Stop retrying
+          if (retries > 3) {
+            console.warn('⚠️ Redis reconnection failed - running without cache');
+            return false; // Stop retrying after 3 attempts
           }
-          return Math.min(retries * 200, 2000); // Exponential backoff
+          return Math.min(retries * 500, 2000); // Exponential backoff
         },
-        connectTimeout: 5000,        // 5s timeout
+        connectTimeout: 10000,       // 10s timeout for Upstash
         keepAlive: 30000,            // Keep connection alive
-        noDelay: true,               // Disable Nagle's algorithm (lower latency)
+        noDelay: true,               // Disable Nagle's algorithm
       },
-      // ── Performance Options ──────────────────────────────────────────────
       commandsQueueMaxLength: 1000,  // Max queued commands
       disableOfflineQueue: true,     // Fail fast if not connected
     };
-
-    // Use free Redis hosting for production:
-    // 1. Upstash Redis (FREE 10K commands/day)
-    // 2. Redis Cloud (FREE 30MB)
-    // 3. Railway Redis (FREE 100MB)
     
     redisClient = createClient(redisConfig);
 
     redisClient.on('error', (err) => {
-      console.warn('⚠️ Redis error (continuing without cache):', err.message);
+      // Silently handle errors in development, log in production
+      if (process.env.NODE_ENV === 'production') {
+        console.error('❌ Redis error:', err.message);
+      }
       redisClient = null;
     });
 
     redisClient.on('ready', () => {
       console.log('✅ Redis Connected - Caching enabled for 10K users!');
+      console.log('   Provider: Upstash (Serverless Redis)');
     });
 
     redisClient.on('reconnecting', () => {
-      console.log('🔄 Redis reconnecting...');
+      if (process.env.NODE_ENV === 'production') {
+        console.log('🔄 Redis reconnecting...');
+      }
     });
 
     // Try to connect with timeout

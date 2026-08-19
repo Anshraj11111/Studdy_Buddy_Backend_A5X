@@ -307,19 +307,26 @@ app.get('/health/db', async (req, res) => {
 
 app.get('/health/redis', async (req, res) => {
   try {
-    const redis = (await import('../config/redis.js')).default;
-    if (redis && redis.status === 'ready') {
+    const { getRedisClient } = await import('./config/redis.js');
+    const redis = getRedisClient();
+    
+    if (redis && redis.isOpen) {
+      // Test Redis with a ping
+      await redis.ping();
+      
       res.status(200).json({
         success: true,
         message: 'Redis is healthy',
-        cache: 'Redis',
-        status: redis.status,
+        cache: 'Redis (Upstash)',
+        status: 'connected',
+        isOpen: redis.isOpen,
       });
     } else {
       res.status(503).json({
         success: false,
-        message: 'Redis connection failed',
-        status: redis?.status || 'unknown',
+        message: 'Redis connection not available',
+        status: 'disconnected',
+        fallback: 'Using in-memory cache',
       });
     }
   } catch (error) {
@@ -328,6 +335,7 @@ app.get('/health/redis', async (req, res) => {
       success: false,
       message: 'Redis health check failed',
       error: error.message,
+      fallback: 'Using in-memory cache',
     });
   }
 });
