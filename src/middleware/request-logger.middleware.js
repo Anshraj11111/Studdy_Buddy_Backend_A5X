@@ -4,6 +4,12 @@ import logger from '../utils/logger.js';
  * Request logging middleware
  */
 export const requestLogger = (req, res, next) => {
+  // Skip logging for health check and ping endpoints (too noisy)
+  const skipPaths = ['/health', '/ping'];
+  if (skipPaths.includes(req.path)) {
+    return next();
+  }
+
   const startTime = Date.now();
 
   // Log incoming request
