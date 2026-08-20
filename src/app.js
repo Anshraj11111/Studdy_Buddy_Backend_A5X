@@ -44,6 +44,8 @@ app.use(
         'http://localhost:3000',
         'https://studdy-buddy-a5x.vercel.app',
         'https://studdy-buddy-backend-a5x.onrender.com',
+        'https://studdybuddy.a5x.in',
+        'https://studdybuddy.docu.in',
         /https:\/\/studdy-buddy.*\.vercel\.app$/, // Allow all Vercel preview URLs
       ];
       
@@ -57,8 +59,9 @@ app.use(
       if (isAllowed) {
         callback(null, true);
       } else {
-        console.log('CORS blocked origin:', origin);
-        callback(null, true); // Temporarily allow all for debugging
+        // Actually block unauthorized origins
+        console.warn('⚠️ CORS blocked unauthorized origin:', origin);
+        callback(new Error('Not allowed by CORS'));
       }
     },
     credentials: true,

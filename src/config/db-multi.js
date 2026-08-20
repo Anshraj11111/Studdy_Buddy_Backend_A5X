@@ -129,7 +129,7 @@ export const connectAllDatabases = async () => {
 export const getConnection = (name = 'primary') => {
   const conn = connections[name];
   if (!conn) {
-    console.warn(`⚠️ ${name} connection not found, returning default mongoose connection`);
+    // Silently return default connection (this is normal during initialization)
     return mongoose.connection;
   }
   return conn;
