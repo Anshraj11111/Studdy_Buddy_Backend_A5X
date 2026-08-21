@@ -341,6 +341,31 @@ class ResourceService {
       throw error;
     }
   }
+
+  /**
+   * Update resource
+   * @param {string} resourceId - Resource ID
+   * @param {Object} updateData - Data to update
+   * @returns {Object} - Updated resource
+   */
+  async updateResource(resourceId, updateData) {
+    try {
+      const resource = await Resource.findByIdAndUpdate(
+        resourceId,
+        updateData,
+        { new: true, runValidators: true }
+      ).populate('uploadedBy', 'name email profileImage');
+
+      if (!resource) {
+        throw new Error('Resource not found');
+      }
+
+      return resource;
+    } catch (error) {
+      console.error('Error updating resource:', error);
+      throw error;
+    }
+  }
 }
 
 export default new ResourceService();

@@ -19,6 +19,7 @@ router.get('/:id', resourceController.getResourceById);
 router.post('/', authMiddleware.authenticate, resourceController.createResource);
 router.post('/:id/download', authMiddleware.authenticate, resourceController.downloadResource);
 router.post('/:id/token', authMiddleware.authenticate, resourceController.getVideoToken);
+router.put('/:id', authMiddleware.authenticate, resourceController.updateResource);
 router.delete('/:id', authMiddleware.authenticate, resourceController.deleteResource);
 
 export default router;
