@@ -43,13 +43,38 @@ class SchoolChannelService {
       if (!channel.members.some(m => m.toString() === userId)) {
         await SchoolChannel.findByIdAndUpdate(channel._id, {
           $addToSet: { members: userId },
-          $inc: { 'stats.totalMembers': 1 },
         });
         // Reload channel to get updated members
         channel = await SchoolChannel.findById(channel._id)
           .populate('createdBy', 'name email profileImage')
           .lean();
       }
+
+      // Clean up duplicates in members array and verify all members exist
+      const uniqueMembers = [...new Set(channel.members?.map(id => String(id)) || [])];
+      
+      // Verify each member exists in database
+      const existingUsers = await User.find({ 
+        _id: { $in: uniqueMembers } 
+      }).select('_id').lean();
+      
+      const validMemberIds = existingUsers.map(u => String(u._id));
+      
+      // Update channel if we found duplicates or orphaned members
+      if (uniqueMembers.length !== channel.members.length || validMemberIds.length !== uniqueMembers.length) {
+        await SchoolChannel.findByIdAndUpdate(channel._id, {
+          members: validMemberIds,
+          'stats.totalMembers': validMemberIds.length,
+        });
+        
+        // Reload to get updated data
+        channel = await SchoolChannel.findById(channel._id)
+          .populate('createdBy', 'name email profileImage')
+          .lean();
+      }
+
+      // Ensure stats.totalMembers matches actual member count
+      channel.stats.totalMembers = channel.members.length;
 
       return channel;
     } catch (error) {
@@ -144,13 +169,19 @@ class SchoolChannelService {
     try {
       const channel = await this.getUserSchoolChannel(userId);
 
+      // Remove duplicates from members array
+      const uniqueMemberIds = [...new Set(channel.members?.map(id => String(id)) || [])];
+
       const members = await User.find({
-        _id: { $in: channel.members },
+        _id: { $in: uniqueMemberIds },
       })
         .select('name email profileImage role xp')
         .lean();
 
-      return members;
+      // Filter out any null results
+      const validMembers = members.filter(m => m !== null);
+
+      return validMembers;
     } catch (error) {
       throw error;
     }
