@@ -267,11 +267,21 @@ class SchoolChannelService {
         .sort({ createdAt: -1 })
         .lean();
 
-      // Add member count to each channel
-      const channelsWithCount = channels.map(channel => ({
-        ...channel,
-        memberCount: channel.members?.length || 0,
-      }));
+      // Add member count to each channel (remove duplicates first)
+      const channelsWithCount = channels.map(channel => {
+        // Remove duplicate member IDs
+        const uniqueMembers = [...new Set(channel.members?.map(id => String(id)) || [])];
+        
+        return {
+          ...channel,
+          memberCount: uniqueMembers.length,
+          members: uniqueMembers, // Return cleaned members array
+          stats: {
+            ...channel.stats,
+            totalMembers: uniqueMembers.length, // Fix stats.totalMembers
+          },
+        };
+      });
 
       return channelsWithCount;
     } catch (error) {

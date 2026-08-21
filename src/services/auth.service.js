@@ -65,7 +65,11 @@ class AuthService {
 
       if (channel) {
         // Add user to existing channel if not already a member
-        if (!channel.members.includes(user._id)) {
+        // Convert ObjectIds to strings for comparison
+        const memberIds = channel.members.map(id => String(id));
+        const userId = String(user._id);
+        
+        if (!memberIds.includes(userId)) {
           channel.members.push(user._id);
           channel.stats.totalMembers = channel.members.length;
           channel.stats.lastActivityAt = new Date();
