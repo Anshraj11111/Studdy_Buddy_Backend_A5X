@@ -107,11 +107,8 @@ class ResourceService {
       throw new Error('Resource title cannot exceed 200 characters');
     }
 
-    if (!resourceData.description || resourceData.description.trim().length === 0) {
-      throw new Error('Resource description is required');
-    }
-
-    if (resourceData.description.length > 2000) {
+    // Description is optional
+    if (resourceData.description && resourceData.description.length > 2000) {
       throw new Error('Resource description cannot exceed 2000 characters');
     }
 
