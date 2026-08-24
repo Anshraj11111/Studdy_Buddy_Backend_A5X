@@ -10,6 +10,7 @@ router.get('/:id', playlistController.getPlaylistById);
 
 // Protected
 router.post('/', authMiddleware.authenticate, playlistController.createPlaylist);
+router.put('/:id', authMiddleware.authenticate, playlistController.updatePlaylist);
 router.post('/:id/videos/:videoId/token', authMiddleware.authenticate, playlistController.getPlaylistVideoToken);
 router.delete('/:id', authMiddleware.authenticate, playlistController.deletePlaylist);
 

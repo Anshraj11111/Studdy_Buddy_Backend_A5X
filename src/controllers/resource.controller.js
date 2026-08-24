@@ -32,12 +32,12 @@ export const createResource = async (req, res) => {
   try {
     const { title, description, fileUrl, fileType, topic, tags, isPublic } = req.body;
 
-    // Validate required fields
-    if (!title || !description || !fileUrl || !topic) {
+    // Validate required fields - Description is optional
+    if (!title || !fileUrl || !topic) {
       return res.status(400).json({
         success: false,
         error: {
-          message: 'Please provide title, description, fileUrl, and topic',
+          message: 'Please provide title, fileUrl, and topic',
           code: 'VALIDATION_ERROR',
         },
       });
@@ -46,7 +46,7 @@ export const createResource = async (req, res) => {
     // Create resource
     const resource = await resourceService.createResource({
       title,
-      description,
+      description: description || '', // Optional - can be empty
       fileUrl,
       fileType: fileType || 'other',
       topic,
@@ -359,7 +359,7 @@ export const updateResource = async (req, res) => {
     // Prepare update data
     const updateData = {};
     if (title) updateData.title = title;
-    if (description) updateData.description = description;
+    if (description !== undefined) updateData.description = description; // Allow empty string
     if (topic) updateData.topic = topic;
     if (tags !== undefined) updateData.tags = tags;
     if (fileUrl && resource.fileType === 'link') {

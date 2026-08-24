@@ -131,19 +131,80 @@ export const getPlaylistVideoToken = async (req, res) => {
   }
 };
 
+// ── Update playlist (owner or mentor) ─────────────────────────────────────────
+export const updatePlaylist = async (req, res) => {
+  try {
+    const pl = await Playlist.findById(req.params.id);
+    if (!pl) return res.status(404).json({ success: false, error: { message: 'Playlist not found' } });
+    
+    // Allow update if user is the creator OR if user is a mentor (admin privilege)
+    const isOwner = String(pl.createdBy) === String(req.user._id);
+    const isMentor = req.user.role === 'mentor';
+    
+    if (!isOwner && !isMentor) {
+      return res.status(403).json({ success: false, error: { message: 'Not authorized to update this playlist' } });
+    }
+
+    const { title, description, topic, thumbnail, videos, tags } = req.body;
+
+    // Validate required fields
+    if (title !== undefined && !title.trim()) {
+      return res.status(400).json({ success: false, error: { message: 'Title cannot be empty' } });
+    }
+    if (description !== undefined && !description.trim()) {
+      return res.status(400).json({ success: false, error: { message: 'Description cannot be empty' } });
+    }
+
+    // Validate videos if provided
+    if (videos && videos.length > 0) {
+      for (const v of videos) {
+        if (!v.title || !v.youtubeUrl) {
+          return res.status(400).json({ success: false, error: { message: 'Each video needs a title and YouTube URL' } });
+        }
+        if (!extractYouTubeId(v.youtubeUrl)) {
+          return res.status(400).json({ success: false, error: { message: `Invalid YouTube URL: ${v.youtubeUrl}` } });
+        }
+      }
+    }
+
+    // Update fields
+    if (title) pl.title = title.trim();
+    if (description) pl.description = description.trim();
+    if (topic) pl.topic = topic;
+    if (thumbnail !== undefined) pl.thumbnail = thumbnail;
+    if (tags !== undefined) pl.tags = tags;
+    if (videos) pl.videos = videos.map((v, i) => ({ ...v, order: i }));
+
+    await pl.save();
+    await pl.populate('createdBy', 'name profileImage');
+
+    res.json({ success: true, data: { playlist: sanitizePlaylist(pl) } });
+  } catch (err) {
+    console.error('Update playlist error:', err);
+    res.status(400).json({ success: false, error: { message: err.message || 'Failed to update playlist' } });
+  }
+};
+
 // ── Delete playlist (owner only) ───────────────────────────────────────────────
 export const deletePlaylist = async (req, res) => {
   try {
     const pl = await Playlist.findById(req.params.id);
     if (!pl) return res.status(404).json({ success: false, error: { message: 'Playlist not found' } });
-    if (String(pl.createdBy) !== String(req.user._id)) {
-      return res.status(403).json({ success: false, error: { message: 'Not authorized' } });
+    
+    // Allow deletion if user is the creator OR if user is a mentor (admin privilege)
+    const isOwner = String(pl.createdBy) === String(req.user._id);
+    const isMentor = req.user.role === 'mentor';
+    
+    if (!isOwner && !isMentor) {
+      return res.status(403).json({ success: false, error: { message: 'Not authorized to delete this playlist' } });
     }
+    
     await pl.deleteOne();
-    res.json({ success: true, data: { message: 'Playlist deleted' } });
+    res.json({ success: true, data: { message: 'Playlist deleted successfully' } });
   } catch (err) {
+    console.error('Delete playlist error:', err);
     res.status(500).json({ success: false, error: { message: 'Failed to delete playlist' } });
   }
 };
 
-export default { createPlaylist, getPlaylists, getPlaylistById, getPlaylistVideoToken, deletePlaylist };
+export default { createPlaylist, getPlaylists, getPlaylistById, getPlaylistVideoToken, updatePlaylist, deletePlaylist };
