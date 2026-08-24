@@ -23,15 +23,25 @@ import playlistRoutes from './routes/playlist.routes.js';
 import schoolChannelRoutes from './routes/schoolChannel.routes.js';
 import { errorHandler } from './middleware/error.middleware.js';
 import { requestLogger } from './middleware/request-logger.middleware.js';
+import { sanitizeMongoOperators } from './middleware/input-sanitization.middleware.js';
+import { securityHeaders, removeSensitiveHeaders } from './middleware/security-headers.middleware.js';
+import csrfProtection from './middleware/csrf-protection.middleware.js';
+import securityLogger from './middleware/security-logger.middleware.js';
 import logger from './utils/logger.js';
 
 const app = express();
+
+// Remove sensitive headers
+app.use(removeSensitiveHeaders);
 
 // Compression middleware
 app.use(compression());
 
 // Security middleware
 app.use(helmet());
+
+// Additional security headers
+app.use(securityHeaders);
 
 // CORS middleware
 app.use(
@@ -74,6 +84,15 @@ app.use(
 // Body parsing middleware with size limits
 app.use(express.json({ limit: '10mb' }));   // Reduced from 20mb for performance
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
+
+// Input sanitization - Protect against NoSQL injection and XSS
+app.use(sanitizeMongoOperators);
+
+// CSRF Protection
+app.use(csrfProtection);
+
+// Security event logging
+app.use(securityLogger);
 
 // Request logging
 app.use(requestLogger);
