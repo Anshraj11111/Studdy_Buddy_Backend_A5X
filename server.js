@@ -95,11 +95,16 @@ const isUserOnline = (userId) => {
 io.userSockets = userSockets;
 io.isUserOnline = isUserOnline;
 
-// Global connection handler for online status
-io.on('connection', (socket) => {
-  console.log(`🔌 Socket connected: ${socket.id}`);
-  
-  // Track user online status from auth handshake
+// Setup socket handlers FIRST (they register their event listeners)
+setupChatSocket(io);
+setupVideoSocket(io);
+setupGeneralGroupSocket(io);
+setupBroadcastSocket(io);
+setupSchoolChannelSocket(io);
+
+// THEN setup centralized connection handler for online status
+io.use((socket, next) => {
+  // Middleware to track user from auth handshake
   if (socket.handshake.auth && socket.handshake.auth.userId) {
     const userId = socket.handshake.auth.userId;
     socket.userId = userId;
@@ -114,14 +119,19 @@ io.on('connection', (socket) => {
     
     // Broadcast to all clients that this user is online
     io.emit('userOnline', { userId });
-  }
-  
-  // Send current online users list to newly connected client
-  if (socket.handshake.auth?.userId) {
+    
+    // Send current online users list to this client
     const onlineUserIds = Array.from(userSockets.keys());
     socket.emit('onlineUsers', { userIds: onlineUserIds });
-    console.log(`📋 Sent online users list to ${socket.handshake.auth.userId}: ${onlineUserIds.length} users online`);
+    console.log(`📋 Sent online users list to ${userId}: ${onlineUserIds.length} users online`);
   }
+  
+  next();
+});
+
+// Add a single global listener for disconnect and getOnlineUsers
+io.on('connection', (socket) => {
+  console.log(`🔌 Socket connected: ${socket.id}`);
   
   // Handle getOnlineUsers request
   socket.on('getOnlineUsers', () => {
@@ -144,13 +154,6 @@ io.on('connection', (socket) => {
     }
   });
 });
-
-// Setup socket handlers
-setupChatSocket(io);
-setupVideoSocket(io);
-setupGeneralGroupSocket(io);
-setupBroadcastSocket(io);
-setupSchoolChannelSocket(io);
 
 // Make io accessible in routes via req.app.get('io')
 app.set('io', io);
