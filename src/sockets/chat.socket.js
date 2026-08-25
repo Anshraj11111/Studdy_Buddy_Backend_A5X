@@ -9,59 +9,14 @@ const MESSAGE_QUEUE_SIZE = 1000;
 export const setupChatSocket = (io) => {
   // Track active connections
   const activeConnections = new Map();
-  // Track user sockets by userId — Set allows multiple tabs per user
-  const userSockets = new Map(); // userId → Set<socketId>
-
-  const addUserSocket = (userId, socketId) => {
-    if (!userSockets.has(userId)) userSockets.set(userId, new Set());
-    userSockets.get(userId).add(socketId);
-  };
-
-  const removeUserSocket = (userId, socketId) => {
-    const sockets = userSockets.get(userId);
-    if (!sockets) return;
-    sockets.delete(socketId);
-    if (sockets.size === 0) userSockets.delete(userId);
-  };
-
-  const isUserOnline = (userId) => {
-    const sockets = userSockets.get(userId);
-    return sockets && sockets.size > 0;
-  };
+  
+  // Use centralized user tracking from io instance
+  const userSockets = io.userSockets;
+  const isUserOnline = io.isUserOnline;
 
   io.on('connection', (socket) => {
-    logger.info('User connected', { socketId: socket.id });
+    logger.info('Chat socket handler - User connected', { socketId: socket.id });
     activeConnections.set(socket.id, { userId: null, roomId: null });
-
-    // Store user socket mapping when they authenticate
-    if (socket.handshake.auth && socket.handshake.auth.userId) {
-      const userId = socket.handshake.auth.userId;
-      socket.userId = userId;
-      socket.userName = socket.handshake.auth.userName || '';
-      socket.userImage = socket.handshake.auth.userImage || '';
-      addUserSocket(userId, socket.id);
-      // Join a personal room for this user
-      socket.join(`user:${userId}`);
-      console.log(`✅ User ${userId} joined personal room user:${userId} with socket ${socket.id}`);
-      logger.info('User joined personal room', { userId, socketId: socket.id });
-
-      // Broadcast online status to all connected clients
-      io.emit('userOnline', { userId });
-    } else {
-      console.log(`⚠️ Socket ${socket.id} connected without userId in handshake.auth`);
-    }
-
-    // Send current online users to newly connected client
-    if (socket.handshake.auth?.userId) {
-      const onlineUserIds = Array.from(userSockets.keys());
-      socket.emit('onlineUsers', { userIds: onlineUserIds });
-    }
-
-    // Handle request to get current online users (for late-mounting components)
-    socket.on('getOnlineUsers', () => {
-      const onlineUserIds = Array.from(userSockets.keys());
-      socket.emit('onlineUsers', { userIds: onlineUserIds });
-    });
 
     // Join room event
     socket.on('joinRoom', async (data) => {
@@ -71,13 +26,6 @@ export const setupChatSocket = (io) => {
         if (!roomId || !userId) {
           socket.emit('error', { message: 'Missing roomId or userId' });
           return;
-        }
-
-        // Store userId and join personal room if not already done
-        if (!socket.userId) {
-          socket.userId = userId;
-          addUserSocket(userId, socket.id);
-          socket.join(`user:${userId}`);
         }
 
         // Verify room exists
@@ -303,17 +251,8 @@ export const setupChatSocket = (io) => {
         });
       }
 
-      // Remove from user sockets map
-      if (socket.userId) {
-        removeUserSocket(socket.userId, socket.id);
-        // Only broadcast offline if this user has no remaining sockets
-        if (!isUserOnline(socket.userId)) {
-          io.emit('userOffline', { userId: socket.userId });
-        }
-      }
-
       activeConnections.delete(socket.id);
-      logger.info('User disconnected', { socketId: socket.id });
+      logger.info('User disconnected from chat', { socketId: socket.id });
     });
 
     // Error handler
@@ -321,10 +260,6 @@ export const setupChatSocket = (io) => {
       logger.error('Socket error', { error: error.message, socketId: socket.id });
     });
   });
-
-  // Make userSockets map available to other socket handlers
-  io.userSockets = userSockets;
-  io.isUserOnline = isUserOnline;
 
   // Periodic cleanup of stale connections
   setInterval(() => {

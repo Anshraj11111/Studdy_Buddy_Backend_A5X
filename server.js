@@ -69,6 +69,82 @@ const io = new Server(server, {
   connectTimeout: 45000,
 });
 
+// ══════════════════════════════════════════════════════════════════════════
+// CENTRALIZED ONLINE STATUS TRACKING
+// ══════════════════════════════════════════════════════════════════════════
+const userSockets = new Map(); // userId → Set<socketId>
+
+const addUserSocket = (userId, socketId) => {
+  if (!userSockets.has(userId)) userSockets.set(userId, new Set());
+  userSockets.get(userId).add(socketId);
+};
+
+const removeUserSocket = (userId, socketId) => {
+  const sockets = userSockets.get(userId);
+  if (!sockets) return;
+  sockets.delete(socketId);
+  if (sockets.size === 0) userSockets.delete(userId);
+};
+
+const isUserOnline = (userId) => {
+  const sockets = userSockets.get(userId);
+  return sockets && sockets.size > 0;
+};
+
+// Make these available to all socket handlers
+io.userSockets = userSockets;
+io.isUserOnline = isUserOnline;
+
+// Global connection handler for online status
+io.on('connection', (socket) => {
+  console.log(`🔌 Socket connected: ${socket.id}`);
+  
+  // Track user online status from auth handshake
+  if (socket.handshake.auth && socket.handshake.auth.userId) {
+    const userId = socket.handshake.auth.userId;
+    socket.userId = userId;
+    socket.userName = socket.handshake.auth.userName || '';
+    socket.userImage = socket.handshake.auth.userImage || '';
+    socket.userRole = socket.handshake.auth.userRole || '';
+    
+    addUserSocket(userId, socket.id);
+    socket.join(`user:${userId}`);
+    
+    console.log(`✅ User ${userId} (${socket.userName}) is now ONLINE - socket ${socket.id}`);
+    
+    // Broadcast to all clients that this user is online
+    io.emit('userOnline', { userId });
+  }
+  
+  // Send current online users list to newly connected client
+  if (socket.handshake.auth?.userId) {
+    const onlineUserIds = Array.from(userSockets.keys());
+    socket.emit('onlineUsers', { userIds: onlineUserIds });
+    console.log(`📋 Sent online users list to ${socket.handshake.auth.userId}: ${onlineUserIds.length} users online`);
+  }
+  
+  // Handle getOnlineUsers request
+  socket.on('getOnlineUsers', () => {
+    const onlineUserIds = Array.from(userSockets.keys());
+    socket.emit('onlineUsers', { userIds: onlineUserIds });
+  });
+  
+  // Handle disconnect
+  socket.on('disconnect', () => {
+    if (socket.userId) {
+      removeUserSocket(socket.userId, socket.id);
+      
+      // Only broadcast offline if user has no remaining connections
+      if (!isUserOnline(socket.userId)) {
+        io.emit('userOffline', { userId: socket.userId });
+        console.log(`🔴 User ${socket.userId} (${socket.userName}) is now OFFLINE`);
+      } else {
+        console.log(`👋 Socket ${socket.id} disconnected but user ${socket.userId} still has other connections`);
+      }
+    }
+  });
+});
+
 // Setup socket handlers
 setupChatSocket(io);
 setupVideoSocket(io);
