@@ -31,6 +31,12 @@ import logger from './utils/logger.js';
 
 const app = express();
 
+// ══════════════════════════════════════════════════════════════════════════
+// TRUST PROXY - CRITICAL FOR RENDER/HEROKU/VERCEL (Behind reverse proxy)
+// ══════════════════════════════════════════════════════════════════════════
+// This fixes rate limiting and IP detection when behind a proxy
+app.set('trust proxy', 1); // Trust first proxy (Render/Vercel/Cloudflare)
+
 // Remove sensitive headers
 app.use(removeSensitiveHeaders);
 

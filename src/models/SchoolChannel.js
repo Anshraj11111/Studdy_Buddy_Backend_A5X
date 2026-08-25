@@ -73,7 +73,13 @@ schoolChannelSchema.index({ createdAt: -1 });
 
 // Static method to generate channelId from school name and city
 schoolChannelSchema.statics.generateChannelId = function(schoolName, city) {
-  return `${schoolName.toLowerCase().replace(/\s+/g, '-')}-${city.toLowerCase().replace(/\s+/g, '-')}`;
+  // Normalize: trim, lowercase, replace multiple spaces/dashes with single dash
+  const normalizeString = (str) => str.trim().toLowerCase()
+    .replace(/\s+/g, '-')  // Replace spaces with dash
+    .replace(/-+/g, '-')   // Replace multiple dashes with single dash
+    .replace(/^-|-$/g, ''); // Remove leading/trailing dashes
+  
+  return `${normalizeString(schoolName)}-${normalizeString(city)}`;
 };
 
 // Method to check if a user can join this channel
