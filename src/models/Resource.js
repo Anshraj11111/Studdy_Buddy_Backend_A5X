@@ -17,6 +17,11 @@ const resourceSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    notesUrl: {
+      type: String,
+      required: false,
+      default: '',
+    },
     fileType: {
       type: String,
       enum: ['pdf', 'doc', 'image', 'video', 'link', 'other'],

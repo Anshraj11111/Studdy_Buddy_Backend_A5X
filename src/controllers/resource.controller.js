@@ -30,7 +30,7 @@ function sanitizeResource(resource) {
  */
 export const createResource = async (req, res) => {
   try {
-    const { title, description, fileUrl, fileType, topic, tags, isPublic } = req.body;
+    const { title, description, fileUrl, fileType, topic, tags, isPublic, notesUrl } = req.body;
 
     // Validate required fields - Description is optional
     if (!title || !fileUrl || !topic) {
@@ -51,6 +51,7 @@ export const createResource = async (req, res) => {
       fileType: fileType || 'other',
       topic,
       tags: tags || [],
+      notesUrl: notesUrl || '', // Optional notes attachment
       uploadedBy: req.user._id,
       isPublic: isPublic !== false,
     });
@@ -330,7 +331,7 @@ export const deleteResource = async (req, res) => {
 export const updateResource = async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, description, topic, tags, fileUrl } = req.body;
+    const { title, description, topic, tags, fileUrl, notesUrl } = req.body;
 
     // Verify ownership
     const resource = await resourceService.getResourceById(id);
@@ -362,6 +363,7 @@ export const updateResource = async (req, res) => {
     if (description !== undefined) updateData.description = description; // Allow empty string
     if (topic) updateData.topic = topic;
     if (tags !== undefined) updateData.tags = tags;
+    if (notesUrl !== undefined) updateData.notesUrl = notesUrl; // Allow updating notes
     if (fileUrl && resource.fileType === 'link') {
       // Only allow updating fileUrl for YouTube links
       updateData.fileUrl = fileUrl;
@@ -485,6 +487,60 @@ export const watchVideo = async (req, res) => {
   }
 };
 
+/**
+ * Upload notes file for a resource
+ * POST /api/resources/upload-notes
+ */
+export const uploadNotes = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'No file uploaded', code: 'NO_FILE' },
+      });
+    }
+
+    console.log('Uploading notes file:', {
+      originalname: req.file.originalname,
+      mimetype: req.file.mimetype,
+      size: req.file.size,
+      bufferLength: req.file.buffer?.length
+    });
+
+    // Validate it's a proper file
+    if (!req.file.buffer || req.file.buffer.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'File buffer is empty', code: 'EMPTY_BUFFER' },
+      });
+    }
+
+    // Upload to Cloudinary using signed upload (more reliable)
+    const uploadResult = await resourceService.uploadToCloudinary(
+      req.file.buffer,
+      req.file.mimetype,
+      req.file.originalname
+    );
+
+    console.log('Notes upload successful:', uploadResult.url);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        url: uploadResult.url,
+        publicId: uploadResult.publicId,
+        message: 'Notes uploaded successfully',
+      },
+    });
+  } catch (error) {
+    console.error('Notes upload error:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: error.message || 'Failed to upload notes', code: 'UPLOAD_ERROR' },
+    });
+  }
+};
+
 export default {
   createResource,
   getResources,
@@ -496,4 +552,5 @@ export default {
   deleteResource,
   getVideoToken,
   watchVideo,
+  uploadNotes,
 };

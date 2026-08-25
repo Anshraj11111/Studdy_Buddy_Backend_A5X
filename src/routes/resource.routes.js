@@ -1,6 +1,7 @@
 import express from 'express';
 import resourceController from '../controllers/resource.controller.js';
 import authMiddleware from '../middleware/auth.middleware.js';
+import upload from '../middleware/upload.middleware.js';
 
 const router = express.Router();
 
@@ -17,6 +18,7 @@ router.get('/:id', resourceController.getResourceById);
 
 // Protected routes
 router.post('/', authMiddleware.authenticate, resourceController.createResource);
+router.post('/upload-notes', authMiddleware.authenticate, upload.single('notes'), resourceController.uploadNotes);
 router.post('/:id/download', authMiddleware.authenticate, resourceController.downloadResource);
 router.post('/:id/token', authMiddleware.authenticate, resourceController.getVideoToken);
 router.put('/:id', authMiddleware.authenticate, resourceController.updateResource);

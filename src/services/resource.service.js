@@ -12,6 +12,12 @@ class ResourceService {
    */
   async uploadToCloudinary(fileBuffer, mimetype, originalName) {
     return new Promise((resolve, reject) => {
+      // Verify Cloudinary config at runtime
+      if (!process.env.CLOUDINARY_API_KEY) {
+        console.error('❌ CLOUDINARY_API_KEY not found in environment!');
+        return reject(new Error('Cloudinary API key is not configured'));
+      }
+
       // Determine Cloudinary resource type
       let resourceType = 'auto';
       let fileType = 'other';
@@ -36,16 +42,37 @@ class ResourceService {
         fileType = 'other';
       }
 
+      console.log('🔧 Cloudinary upload starting:', {
+        originalName,
+        mimetype,
+        resourceType,
+        fileType,
+        bufferSize: fileBuffer.length
+      });
+
+      // Use upload_stream with proper error handling
       const uploadStream = cloudinary.uploader.upload_stream(
         {
-          folder: 'studdy-buddy/resources',
+          folder: 'studdy-buddy/notes',
           resource_type: resourceType,
-          public_id: `${Date.now()}-${originalName.replace(/\s+/g, '_')}`,
-          use_filename: true,
-          unique_filename: false,
+          public_id: `${Date.now()}-${originalName.replace(/\.[^/.]+$/, '').replace(/\s+/g, '_')}`,
+          access_mode: 'public',
+          type: 'upload',
         },
         (error, result) => {
-          if (error) return reject(new Error(`Cloudinary upload failed: ${error.message}`));
+          if (error) {
+            console.error('❌ Cloudinary upload error:', error);
+            return reject(new Error(`Cloudinary upload failed: ${error.message}`));
+          }
+          
+          console.log('✅ Cloudinary upload success:', {
+            url: result.secure_url,
+            format: result.format,
+            bytes: result.bytes,
+            resource_type: result.resource_type
+          });
+          
+          // Return the secure URL without fl_attachment for inline preview
           resolve({
             url: result.secure_url,
             publicId: result.public_id,
@@ -54,11 +81,8 @@ class ResourceService {
         }
       );
 
-      // Convert buffer to readable stream and pipe to Cloudinary
-      const readable = new Readable();
-      readable.push(fileBuffer);
-      readable.push(null);
-      readable.pipe(uploadStream);
+      // Write buffer directly to stream (no conversion)
+      uploadStream.end(fileBuffer);
     });
   }
 
