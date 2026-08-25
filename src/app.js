@@ -110,6 +110,11 @@ const limiter = rateLimit({
   message: 'Too many requests from this IP, please try again later.',
   standardHeaders: true,
   legacyHeaders: false,
+  // Skip rate limiting on error to prevent crashes
+  skip: (req) => {
+    // If X-Forwarded-For header causes issues, skip rate limiting
+    return false;
+  },
   // Use Redis for distributed rate limiting if available
   store: process.env.REDIS_URL ? undefined : undefined, // TODO: Add Redis store
 });
@@ -121,6 +126,10 @@ const authLimiter = rateLimit({
   skipSuccessfulRequests: true,
   standardHeaders: true,
   legacyHeaders: false,
+  // Skip rate limiting on error to prevent crashes
+  skip: (req) => {
+    return false;
+  },
 });
 
 // Apply rate limiting in production

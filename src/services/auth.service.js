@@ -187,10 +187,16 @@ class AuthService {
    * @returns {string} JWT token
    */
   generateToken(userId) {
+    // Ensure expiresIn is in correct format (string like '24h' or number in seconds)
+    const expiresIn = process.env.JWT_EXPIRE || '24h';
+    
+    // Validate format - if it's a plain number without unit, convert to seconds
+    const validatedExpiry = /^\d+$/.test(expiresIn) ? parseInt(expiresIn) : expiresIn;
+    
     return jwt.sign(
       { userId },
       process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRE || '24h' }
+      { expiresIn: validatedExpiry }
     );
   }
 
