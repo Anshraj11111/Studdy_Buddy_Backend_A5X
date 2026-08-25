@@ -13,9 +13,9 @@
 
 const BLOCKED_TERMS = [
   // ── English profanity & slurs ────────────────────────────────────────────
-  'fuck', 'fucker', 'fucking', 'fucked', 'fucks', 'f.u.c.k',
-  'shit', 'shits', 'shitty', 'bullshit',
-  'bitch', 'bitches', 'bitching',
+  'fuck', 'fucker', 'fucking', 'fucked', 'fucks', 'f.u.c.k', 'fuk', 'fck',
+  'shit', 'shits', 'shitty', 'bullshit', 'sht',
+  'bitch', 'bitches', 'bitching', 'btch',
   'ass', 'asshole', 'arsehole', 'arse',
   'bastard', 'bastards',
   'cunt', 'cunts',
@@ -27,13 +27,14 @@ const BLOCKED_TERMS = [
   'nigger', 'niggers', 'nigga',
   'faggot', 'fag', 'dyke',
   'retard', 'retarded',
-  'motherfucker', 'motherf',
+  'motherfucker', 'motherf', 'mofo',
   'son of a bitch', 'sonofabitch',
   'damn', 'damnit',
   'crap',
   'idiot', 'moron', 'stupid',
   'kill yourself', 'kys',
   'go to hell', 'go fuck',
+  'loser', 'dumb', 'dumbass',
 
   // ── Sexual / porn terms ──────────────────────────────────────────────────
   'porn', 'porno', 'pornography',
@@ -65,29 +66,34 @@ const BLOCKED_TERMS = [
   'date me', 'date with me', 'lets meet',
 
   // ── Hindi / Hinglish gaaliyan ────────────────────────────────────────────
-  'madarchod', 'maderchod', 'maadar chod', 'madarchhod',
+  'madarchod', 'maderchod', 'maadar chod', 'madarchhod', 'mc',
   'behenchod', 'behen chod', 'bhenchod', 'bc',
-  'chutiya', 'chutiye', 'chut',
-  'gaandu', 'gandu', 'gand',
-  'bhosdike', 'bhosdiwale', 'bhosdi',
-  'randi', 'randwa', 'rande',
-  'harami', 'haramzada', 'haramzadi',
-  'saala', 'saali',
-  'lauda', 'lavda', 'lund',
-  'tere maa ki', 'teri maa',
+  'chutiya', 'chutiye', 'chut', 'chod',
+  'gaandu', 'gandu', 'gand', 'gaand',
+  'bhosdike', 'bhosdiwale', 'bhosdi', 'bsdk',
+  'randi', 'randwa', 'rande', 'randi ka baccha',
+  'harami', 'haramzada', 'haramzadi', 'haraamkhor',
+  'saala', 'saali', 'sala',
+  'lauda', 'lavda', 'lund', 'loda', 'lawde', 'lode', 'lawda',
+  'tere maa ki', 'teri maa', 'teri ma',
   'teri behen', 'teri behan',
   'bakwaas', 'bakwas',
-  'kamina', 'kamine',
-  'kutte', 'kutta',
+  'kamina', 'kamine', 'kamini',
+  'kutte', 'kutta', 'kutti',
   'suar', 'suwar',
-  'ullu', 'gadha',
+  'ullu', 'gadha', 'gadhe',
   'jhatu', 'jhaat',
-  'bsdk', 'bkl', 'mkl', 'mkc',
+  'bkl', 'mkl', 'mkc', 'bhen ke lode',
+  'lode', 'loda', 'lodu',
+  'chutad', 'gaand mara', 'maa chuda',
+  'bhag bsdk', 'bhag bc', 'nikal',
+  'teri maa ka', 'teri behen ka',
 
   // ── Threat / harassment ──────────────────────────────────────────────────
   'i will kill', 'i will hurt', 'i will find you',
   'you will die', 'get lost', 'go die',
   'harassment', 'threaten', 'stalk',
+  'maar dunga', 'tod dunga',
 ];
 
 // ---------------------------------------------------------------------------
@@ -105,8 +111,14 @@ const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 // a looser match (allow any whitespace between words)
 const patternParts = sorted.map(term => {
   const escaped = escape(term).replace(/ +/g, '[\\s_-]*');
-  // Single word → word-boundary; phrase → no extra boundary needed
-  return term.includes(' ') ? escaped : `\\b${escaped}\\b`;
+  // For single words, don't require word boundary at the end to catch variations
+  // This will match "bhosdi" in "bhosdi", "bhosdike", "bhosdiwaale", etc.
+  if (term.includes(' ')) {
+    return escaped;
+  } else {
+    // Start with word boundary, but end can have more characters
+    return `\\b${escaped}`;
+  }
 });
 
 const BLOCK_REGEX = new RegExp(patternParts.join('|'), 'i');

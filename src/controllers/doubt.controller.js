@@ -2,6 +2,7 @@ import doubtService from '../services/doubt.service.js';
 import matchService from '../services/match.service.js';
 import { addXP } from '../services/xp.service.js';
 import cache from '../services/cache.service.js';
+import { checkContent } from '../utils/contentFilter.js';
 
 // Cache TTLs
 const DOUBTS_LIST_TTL = 30;  // 30 seconds — list is frequently changing
@@ -41,6 +42,29 @@ export const createDoubt = async (req, res) => {
         error: {
           message: 'Description cannot exceed 5000 characters',
           code: 'VALIDATION_ERROR',
+        },
+      });
+    }
+
+    // Content moderation - block abusive words in title and description
+    const titleMod = checkContent(title);
+    if (titleMod.blocked) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: titleMod.reason,
+          code: 'CONTENT_BLOCKED',
+        },
+      });
+    }
+
+    const descMod = checkContent(description);
+    if (descMod.blocked) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: descMod.reason,
+          code: 'CONTENT_BLOCKED',
         },
       });
     }

@@ -3,6 +3,7 @@ import FeedPost from '../models/FeedPost.js';
 import Notification from '../models/Notification.js';
 import authMiddleware from '../middleware/auth.middleware.js';
 import { addXP } from '../services/xp.service.js';
+import { checkContent } from '../utils/contentFilter.js';
 
 const router = express.Router();
 const { authenticate } = authMiddleware;
@@ -53,6 +54,20 @@ router.post('/', authenticate, async (req, res) => {
     const { content, category = 'All', mediaUrl, mediaType } = req.body;
     if (!content?.trim() && !mediaUrl) {
       return res.status(400).json({ success: false, error: { message: 'Content or media is required' } });
+    }
+
+    // Content moderation - block abusive words in post content
+    if (content?.trim()) {
+      const modResult = checkContent(content);
+      if (modResult.blocked) {
+        return res.status(400).json({ 
+          success: false, 
+          error: { 
+            message: modResult.reason,
+            code: 'CONTENT_BLOCKED'
+          } 
+        });
+      }
     }
 
     const post = await FeedPost.create({
@@ -137,6 +152,18 @@ router.post('/:id/comment', authenticate, async (req, res) => {
       return res.status(400).json({ success: false, error: { message: 'Comment cannot be empty' } });
     }
 
+    // Content moderation - block abusive words
+    const modResult = checkContent(content);
+    if (modResult.blocked) {
+      return res.status(400).json({ 
+        success: false, 
+        error: { 
+          message: modResult.reason,
+          code: 'CONTENT_BLOCKED'
+        } 
+      });
+    }
+
     const post = await FeedPost.findById(req.params.id);
     if (!post) return res.status(404).json({ success: false, error: { message: 'Post not found' } });
 
@@ -170,6 +197,82 @@ router.post('/:id/comment', authenticate, async (req, res) => {
     res.status(201).json({ success: true, data: { post: populatedPost } });
   } catch (err) {
     res.status(500).json({ success: false, error: { message: 'Failed to add comment' } });
+  }
+});
+
+// PUT /api/feed/:postId/comment/:commentId - Edit comment
+router.put('/:postId/comment/:commentId', authenticate, async (req, res) => {
+  try {
+    const { content } = req.body;
+    if (!content?.trim()) {
+      return res.status(400).json({ success: false, error: { message: 'Comment cannot be empty' } });
+    }
+
+    // Content moderation - block abusive words
+    const modResult = checkContent(content);
+    if (modResult.blocked) {
+      return res.status(400).json({ 
+        success: false, 
+        error: { 
+          message: modResult.reason,
+          code: 'CONTENT_BLOCKED'
+        } 
+      });
+    }
+
+    const post = await FeedPost.findById(req.params.postId);
+    if (!post) return res.status(404).json({ success: false, error: { message: 'Post not found' } });
+
+    const comment = post.comments.id(req.params.commentId);
+    if (!comment) return res.status(404).json({ success: false, error: { message: 'Comment not found' } });
+
+    // Check if user owns the comment
+    if (String(comment.userId) !== String(req.user._id)) {
+      return res.status(403).json({ success: false, error: { message: 'Not authorized to edit this comment' } });
+    }
+
+    comment.content = content.trim();
+    await post.save();
+
+    const populatedPost = await FeedPost.findById(post._id)
+      .populate('userId', 'name profileImage role')
+      .populate('comments.userId', 'name profileImage');
+
+    res.status(200).json({ success: true, data: { post: populatedPost } });
+  } catch (err) {
+    res.status(500).json({ success: false, error: { message: 'Failed to edit comment' } });
+  }
+});
+
+// DELETE /api/feed/:postId/comment/:commentId - Delete comment
+router.delete('/:postId/comment/:commentId', authenticate, async (req, res) => {
+  try {
+    const post = await FeedPost.findById(req.params.postId);
+    if (!post) return res.status(404).json({ success: false, error: { message: 'Post not found' } });
+
+    const comment = post.comments.id(req.params.commentId);
+    if (!comment) return res.status(404).json({ success: false, error: { message: 'Comment not found' } });
+
+    // Check if user owns the comment or owns the post
+    const isCommentOwner = String(comment.userId) === String(req.user._id);
+    const isPostOwner = String(post.userId) === String(req.user._id);
+    
+    if (!isCommentOwner && !isPostOwner) {
+      return res.status(403).json({ success: false, error: { message: 'Not authorized to delete this comment' } });
+    }
+
+    // Use pull to remove the comment from the array
+    post.comments.pull(req.params.commentId);
+    await post.save();
+
+    const populatedPost = await FeedPost.findById(post._id)
+      .populate('userId', 'name profileImage role')
+      .populate('comments.userId', 'name profileImage');
+
+    res.status(200).json({ success: true, data: { post: populatedPost } });
+  } catch (err) {
+    console.error('Delete comment error:', err);
+    res.status(500).json({ success: false, error: { message: 'Failed to delete comment' } });
   }
 });
 

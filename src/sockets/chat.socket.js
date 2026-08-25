@@ -220,6 +220,41 @@ export const setupChatSocket = (io) => {
       }
     });
 
+    // Delete message event
+    socket.on('deleteMessage', async (data) => {
+      try {
+        const { messageId, userId, roomId } = data;
+
+        if (!messageId || !userId) {
+          socket.emit('error', { message: 'Missing messageId or userId' });
+          return;
+        }
+
+        // Delete message (service will verify ownership)
+        const deletedMessage = await MessageService.deleteMessage(messageId);
+
+        if (!deletedMessage) {
+          socket.emit('error', { message: 'Message not found' });
+          return;
+        }
+
+        // Verify the user owns this message
+        const senderId = String(deletedMessage.senderId?._id || deletedMessage.senderId);
+        if (senderId !== String(userId)) {
+          socket.emit('error', { message: 'You can only delete your own messages' });
+          return;
+        }
+
+        // Broadcast deletion to everyone in the room
+        io.to(roomId).emit('messageDeleted', { messageId });
+
+        logger.debug('Message deleted', { userId, roomId, messageId });
+      } catch (error) {
+        logger.error('Error deleting message', { error: error.message });
+        socket.emit('error', { message: error.message || 'Failed to delete message' });
+      }
+    });
+
     // Typing indicator event
     socket.on('typing', (data) => {
       const { roomId, userId, userName } = data;

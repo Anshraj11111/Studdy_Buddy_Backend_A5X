@@ -1,6 +1,7 @@
 import SchoolChannel from '../models/SchoolChannel.js';
 import SchoolChannelMessage from '../models/SchoolChannelMessage.js';
 import User from '../models/User.js';
+import { checkContent } from '../utils/contentFilter.js';
 
 export const setupSchoolChannelSocket = (io) => {
   io.on('connection', (socket) => {
@@ -55,6 +56,15 @@ export const setupSchoolChannelSocket = (io) => {
         if (channel.createdBy.toString() !== userId) {
           socket.emit('school-channel:error', { message: 'Only the channel admin can post messages' });
           return;
+        }
+
+        // Content moderation - block abusive words
+        if (content && typeof content === 'string') {
+          const modResult = checkContent(content);
+          if (modResult.blocked) {
+            socket.emit('school-channel:error', { message: modResult.reason });
+            return;
+          }
         }
 
         // Create and save message

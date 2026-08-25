@@ -1,4 +1,5 @@
 import communityService from '../services/community.service.js';
+import { checkContent } from '../utils/contentFilter.js';
 
 /**
  * Create a new community
@@ -214,6 +215,18 @@ export const createPost = async (req, res) => {
         error: {
           message: 'Please provide post content',
           code: 'VALIDATION_ERROR',
+        },
+      });
+    }
+
+    // Content moderation - block abusive words
+    const modResult = checkContent(content);
+    if (modResult.blocked) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: modResult.reason,
+          code: 'CONTENT_BLOCKED',
         },
       });
     }
