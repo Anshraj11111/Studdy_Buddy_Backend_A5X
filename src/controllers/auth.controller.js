@@ -6,7 +6,7 @@ import authService from '../services/auth.service.js';
  */
 export const register = async (req, res) => {
   try {
-    const { name, email, password, role, skills, mentorCode, schoolName, city } = req.body;
+    const { name, email, password, role, skills, mentorCode, schoolName, schoolPassword, city } = req.body;
 
     // Input validation
     if (!name || !email || !password) {
@@ -31,11 +31,11 @@ export const register = async (req, res) => {
 
     // Validate school info for students
     if (role === 'student' || !role) {
-      if (!schoolName || !city) {
+      if (!schoolName || !schoolPassword || !city) {
         return res.status(400).json({
           success: false,
           error: {
-            message: 'Please provide school name and city',
+            message: 'Please provide school code, school password, and city',
             code: 'VALIDATION_ERROR',
           },
         });
@@ -65,6 +65,7 @@ export const register = async (req, res) => {
       skills,
       mentorCode: role === 'mentor' ? mentorCode : null,
       schoolName: role === 'student' || !role ? schoolName : null,
+      schoolPassword: role === 'student' || !role ? schoolPassword : null,
       city: role === 'student' || !role ? city : null,
     });
 
@@ -85,6 +86,16 @@ export const register = async (req, res) => {
         error: {
           message: error.message,
           code: 'EMAIL_EXISTS',
+        },
+      });
+    }
+
+    if (error.message === 'Invalid school password') {
+      return res.status(403).json({
+        success: false,
+        error: {
+          message: error.message,
+          code: 'INVALID_SCHOOL_PASSWORD',
         },
       });
     }

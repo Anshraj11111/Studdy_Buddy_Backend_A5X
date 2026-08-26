@@ -114,6 +114,11 @@ const userSchema = new mongoose.Schema(
       default: '',
       trim: true,
     },
+    schoolPassword: {
+      type: String,
+      default: '',
+      trim: true,
+    },
     city: {
       type: String,
       default: '',
@@ -141,6 +146,7 @@ const userSchema = new mongoose.Schema(
 userSchema.methods.toJSON = function () {
   const user = this.toObject();
   delete user.password;
+  delete user.schoolPassword;
   delete user.phone;
   delete user.privateAddress;
   return user;
@@ -150,6 +156,7 @@ userSchema.methods.toJSON = function () {
 userSchema.methods.toOwnerJSON = function () {
   const user = this.toObject();
   delete user.password;
+  delete user.schoolPassword;
   return user;
 };
 

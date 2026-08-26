@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import SchoolChannel from '../models/SchoolChannel.js';
+import PreRegisteredStudent from '../models/PreRegisteredStudent.js';
 
 class AuthService {
   /**
@@ -11,12 +12,47 @@ class AuthService {
    */
   async register(userData) {
     try {
-      const { name, email, password, role, skills, mentorCode, schoolName, city } = userData;
+      const { name, email, password, role, skills, mentorCode, schoolName, schoolPassword, city } = userData;
 
       // Check if user already exists
       const existingUser = await User.findOne({ email });
       if (existingUser) {
         throw new Error('Email already exists');
+      }
+
+      // Validate school password for students against pre-registered data
+      if ((role === 'student' || !role) && schoolPassword) {
+        // Check if student is pre-registered by admin
+        const preRegistered = await PreRegisteredStudent.findOne({ 
+          email: email,
+          isUsed: false
+        });
+
+        if (preRegistered) {
+          // Admin ne pre-register kiya hai - validate password
+          if (preRegistered.schoolPassword !== schoolPassword) {
+            throw new Error('Invalid school password');
+          }
+          
+          // Mark as used
+          preRegistered.isUsed = true;
+          preRegistered.usedAt = new Date();
+          await preRegistered.save();
+        } else {
+          // Check if any student from the same school exists (old logic for backward compatibility)
+          const existingStudent = await User.findOne({ 
+            schoolName: schoolName,
+            role: 'student',
+            schoolPassword: { $exists: true, $ne: '' }
+          });
+
+          if (existingStudent) {
+            // School already has students - verify password matches
+            if (existingStudent.schoolPassword !== schoolPassword) {
+              throw new Error('Invalid school password');
+            }
+          }
+        }
       }
 
       // Hash password
@@ -31,6 +67,7 @@ class AuthService {
         skills: skills || [],
         mentorCode: mentorCode || null,
         schoolName: schoolName || '',
+        schoolPassword: schoolPassword || '',
         city: city || '',
       });
 

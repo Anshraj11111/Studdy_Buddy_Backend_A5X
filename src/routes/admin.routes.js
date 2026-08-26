@@ -1,5 +1,15 @@
 import express from 'express';
-import { getStats, getUsers, toggleUserActive, deleteUser } from '../controllers/admin.controller.js';
+import { 
+  getStats, 
+  getUsers, 
+  toggleUserActive, 
+  deleteUser,
+  preRegisterStudent,
+  getPreRegisteredStudents,
+  deletePreRegisteredStudent,
+  updatePreRegisteredStudent
+} from '../controllers/admin.controller.js';
+import { authenticate } from '../middleware/auth.middleware.js';
 
 const router = express.Router();
 
@@ -19,5 +29,11 @@ router.get('/stats', getStats);
 router.get('/users', getUsers);
 router.put('/users/:id/toggle', toggleUserActive);
 router.delete('/users/:id', deleteUser);
+
+// Pre-registration routes
+router.post('/pre-register', authenticate, preRegisterStudent);
+router.get('/pre-registered', getPreRegisteredStudents);
+router.put('/pre-registered/:id', authenticate, updatePreRegisteredStudent);
+router.delete('/pre-registered/:id', deletePreRegisteredStudent);
 
 export default router;
