@@ -7,7 +7,8 @@ import {
   preRegisterStudent,
   getPreRegisteredStudents,
   deletePreRegisteredStudent,
-  updatePreRegisteredStudent
+  updatePreRegisteredStudent,
+  getSchoolCodes
 } from '../controllers/admin.controller.js';
 import { authenticate } from '../middleware/auth.middleware.js';
 
@@ -33,6 +34,7 @@ router.delete('/users/:id', deleteUser);
 // Pre-registration routes
 router.post('/pre-register', authenticate, preRegisterStudent);
 router.get('/pre-registered', getPreRegisteredStudents);
+router.get('/school-codes', getSchoolCodes);
 router.put('/pre-registered/:id', authenticate, updatePreRegisteredStudent);
 router.delete('/pre-registered/:id', deletePreRegisteredStudent);
 

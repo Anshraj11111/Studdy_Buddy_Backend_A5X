@@ -127,11 +127,15 @@ export const preRegisterStudent = async (req, res) => {
 // Get all pre-registered students
 export const getPreRegisteredStudents = async (req, res) => {
   try {
-    const { search, page = 1, limit = 50, status = 'all' } = req.query;
+    const { search, page = 1, limit = 500, status = 'all', schoolName } = req.query;
     const filter = {};
     
     if (status === 'unused') filter.isUsed = false;
     if (status === 'used') filter.isUsed = true;
+    
+    if (schoolName && schoolName !== 'all') {
+      filter.schoolName = schoolName;
+    }
     
     if (search) {
       filter.$or = [
@@ -151,6 +155,22 @@ export const getPreRegisteredStudents = async (req, res) => {
     res.json({
       success: true,
       data: { students, total, page: Number(page) },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: { message: err.message } });
+  }
+};
+
+// Get unique school codes
+export const getSchoolCodes = async (req, res) => {
+  try {
+    const schoolCodes = await PreRegisteredStudent.distinct('schoolName');
+    // Filter out empty/null values and sort
+    const validCodes = schoolCodes.filter(code => code && code.trim()).sort();
+    
+    res.json({
+      success: true,
+      data: { schoolCodes: validCodes },
     });
   } catch (err) {
     res.status(500).json({ success: false, error: { message: err.message } });
