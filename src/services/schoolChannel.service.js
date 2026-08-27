@@ -269,11 +269,15 @@ class SchoolChannelService {
       );
 
       if (existingReaction) {
-        // Remove reaction if already exists
+        // Remove reaction if clicking the same emoji (toggle off)
         message.reactions = message.reactions.filter(
           r => !(r.userId.toString() === userId && r.emoji === emoji)
         );
       } else {
+        // Remove any existing reaction from this user first (WhatsApp style - one reaction per user)
+        message.reactions = message.reactions.filter(
+          r => r.userId.toString() !== userId
+        );
         // Add new reaction
         message.reactions.push({ emoji, userId });
       }
