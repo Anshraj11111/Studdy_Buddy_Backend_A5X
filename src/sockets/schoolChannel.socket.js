@@ -137,16 +137,22 @@ export const setupSchoolChannelSocket = (io) => {
           return;
         }
 
-        // Toggle reaction
+        // WhatsApp-style reaction: one reaction per user
         const existingReaction = message.reactions.find(
           r => r.userId.toString() === userId && r.emoji === emoji
         );
 
         if (existingReaction) {
+          // Remove reaction if clicking the same emoji (toggle off)
           message.reactions = message.reactions.filter(
             r => !(r.userId.toString() === userId && r.emoji === emoji)
           );
         } else {
+          // Remove any existing reaction from this user first (WhatsApp style)
+          message.reactions = message.reactions.filter(
+            r => r.userId.toString() !== userId
+          );
+          // Add new reaction
           message.reactions.push({ emoji, userId });
         }
 
