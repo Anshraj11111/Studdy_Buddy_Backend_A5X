@@ -348,7 +348,16 @@ export const createChannel = async (req, res) => {
       });
     }
 
-    const channel = await schoolChannelService.createChannel(req.user._id, {
+    // For admin routes, req.user might be undefined when using admin secret
+    // Find any admin user as fallback
+    let userId = req.user?._id;
+    if (!userId) {
+      const User = (await import('../models/User.js')).default;
+      const adminUser = await User.findOne({ role: 'admin' });
+      userId = adminUser?._id || (await User.findOne())?._id;
+    }
+
+    const channel = await schoolChannelService.createChannel(userId, {
       schoolName,
       city,
       description,
@@ -431,7 +440,15 @@ export const broadcastMessage = async (req, res) => {
       });
     }
 
-    const result = await schoolChannelService.broadcastMessage(req.user._id, message, channelIds);
+    // For admin routes, req.user might be undefined when using admin secret
+    let userId = req.user?._id;
+    if (!userId) {
+      const User = (await import('../models/User.js')).default;
+      const adminUser = await User.findOne({ role: 'admin' });
+      userId = adminUser?._id || (await User.findOne())?._id;
+    }
+
+    const result = await schoolChannelService.broadcastMessage(userId, message, channelIds);
 
     res.status(200).json({
       success: true,
@@ -489,7 +506,9 @@ export const getAllMessages = async (req, res) => {
 export const deleteMessageAdmin = async (req, res) => {
   try {
     const { messageId } = req.params;
-    const message = await schoolChannelService.deleteMessageAdmin(messageId, req.user._id);
+    // For admin routes, req.user might be undefined when using admin secret
+    const userId = req.user?._id || null;
+    const message = await schoolChannelService.deleteMessageAdmin(messageId, userId);
 
     res.status(200).json({
       success: true,
