@@ -32,10 +32,10 @@ router.put('/users/:id/toggle', toggleUserActive);
 router.delete('/users/:id', deleteUser);
 
 // Pre-registration routes
-router.post('/pre-register', authenticate, preRegisterStudent);
+router.post('/pre-register', preRegisterStudent);
 router.get('/pre-registered', getPreRegisteredStudents);
 router.get('/school-codes', getSchoolCodes);
-router.put('/pre-registered/:id', authenticate, updatePreRegisteredStudent);
+router.put('/pre-registered/:id', updatePreRegisteredStudent);
 router.delete('/pre-registered/:id', deletePreRegisteredStudent);
 
 export default router;

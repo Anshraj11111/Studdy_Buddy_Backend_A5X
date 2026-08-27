@@ -78,7 +78,7 @@ export const deleteUser = async (req, res) => {
 // Pre-register student with school password
 export const preRegisterStudent = async (req, res) => {
   try {
-    const { name, email, phone, schoolPassword } = req.body;
+    const { name, email, phone, schoolPassword, schoolName } = req.body;
 
     // Validation
     if (!name || !email || !schoolPassword) {
@@ -106,13 +106,26 @@ export const preRegisterStudent = async (req, res) => {
       });
     }
 
+    // Use authenticated user if available, otherwise find any admin user
+    let createdById = req.user?._id;
+    if (!createdById) {
+      const adminUser = await User.findOne({ role: 'admin' });
+      if (!adminUser) {
+        const anyUser = await User.findOne();
+        createdById = anyUser?._id;
+      } else {
+        createdById = adminUser._id;
+      }
+    }
+
     // Create pre-registered student
     const preRegistered = await PreRegisteredStudent.create({
       name,
       email,
       phone: phone || '',
+      schoolName: schoolName || '',
       schoolPassword,
-      createdBy: req.user._id,
+      createdBy: createdById,
     });
 
     res.status(201).json({
