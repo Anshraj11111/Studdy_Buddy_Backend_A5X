@@ -21,8 +21,9 @@ export const securityHeaders = (req, res, next) => {
   // Referrer policy
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   
-  // Permissions policy (restrict dangerous features)
-  res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+  // Permissions policy (allow camera/mic for video calls, block everything else)
+  res.setHeader('Permissions-Policy', 
+    'camera=*, microphone=*, display-capture=*, geolocation=()');
   
   // Content Security Policy
   if (process.env.NODE_ENV === 'production') {
