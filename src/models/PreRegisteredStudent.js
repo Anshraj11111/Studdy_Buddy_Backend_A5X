@@ -1,4 +1,4 @@
-﻿import mongoose from 'mongoose';
+import mongoose from 'mongoose';
 
 const preRegisteredStudentSchema = new mongoose.Schema(
   {
@@ -19,6 +19,11 @@ const preRegisteredStudentSchema = new mongoose.Schema(
       ],
     },
     phone: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    schoolName: {
       type: String,
       default: '',
       trim: true,
@@ -47,6 +52,7 @@ const preRegisteredStudentSchema = new mongoose.Schema(
   }
 );
 
+// Indexes for performance
 preRegisteredStudentSchema.index({ email: 1 });
 preRegisteredStudentSchema.index({ isUsed: 1 });
 
