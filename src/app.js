@@ -21,6 +21,7 @@ import generalGroupRoutes from './routes/generalGroup.routes.js';
 import broadcastRoutes from './routes/broadcast.routes.js';
 import playlistRoutes from './routes/playlist.routes.js';
 import schoolChannelRoutes from './routes/schoolChannel.routes.js';
+import paymentRoutes from './routes/payment.routes.js';
 import { errorHandler } from './middleware/error.middleware.js';
 import { requestLogger } from './middleware/request-logger.middleware.js';
 import { sanitizeMongoOperators } from './middleware/input-sanitization.middleware.js';
@@ -396,6 +397,7 @@ app.use('/api/general-group', generalGroupRoutes);
 app.use('/api/broadcast', broadcastRoutes);
 app.use('/api/playlists', playlistRoutes);
 app.use('/api/school-channel', schoolChannelRoutes);
+app.use('/api/payments', paymentRoutes);
 
 // 404 handler
 app.use((req, res) => {

@@ -29,18 +29,9 @@ export const register = async (req, res) => {
       });
     }
 
-    // Validate school info for students
-    if (role === 'student' || !role) {
-      if (!schoolName || !schoolPassword || !city) {
-        return res.status(400).json({
-          success: false,
-          error: {
-            message: 'Please provide school code, school password, and city',
-            code: 'VALIDATION_ERROR',
-          },
-        });
-      }
-    }
+    // School info is now optional for students (freemium model)
+    // Students WITH school code get free access
+    // Students WITHOUT school code can signup but need to pay for resources
 
     // Validate mentor code if role is mentor
     if (role === 'mentor') {

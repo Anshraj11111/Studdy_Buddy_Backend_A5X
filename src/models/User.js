@@ -108,7 +108,7 @@ const userSchema = new mongoose.Schema(
       endYear: { type: String, default: '' },
       description: { type: String, default: '', maxlength: [500, 'Description too long'] },
     },
-    // School-specific fields (required for students)
+    // School-specific fields (optional - for free access)
     schoolName: {
       type: String,
       default: '',
@@ -123,6 +123,23 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: '',
       trim: true,
+    },
+    // Payment fields for freemium model
+    isPremium: {
+      type: Boolean,
+      default: false,
+    },
+    paidCourses: [
+      {
+        courseId: { type: String },
+        amount: { type: Number },
+        transactionId: { type: String },
+        paidAt: { type: Date, default: Date.now },
+      }
+    ],
+    totalPaid: {
+      type: Number,
+      default: 0,
     },
     // Mentor: professional experience
     experience: {
@@ -146,6 +163,8 @@ const userSchema = new mongoose.Schema(
 userSchema.methods.toJSON = function () {
   const user = this.toObject();
   delete user.password;
+  // Add hasFreeAccess flag: true if has school credentials OR isPremium
+  user.hasFreeAccess = !!(this.schoolName && this.schoolPassword) || this.isPremium;
   delete user.schoolPassword;
   delete user.phone;
   delete user.privateAddress;
@@ -156,6 +175,8 @@ userSchema.methods.toJSON = function () {
 userSchema.methods.toOwnerJSON = function () {
   const user = this.toObject();
   delete user.password;
+  // Add hasFreeAccess flag: true if has school credentials OR isPremium
+  user.hasFreeAccess = !!(this.schoolName && this.schoolPassword) || this.isPremium;
   delete user.schoolPassword;
   return user;
 };

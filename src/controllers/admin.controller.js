@@ -1,5 +1,7 @@
 import User from '../models/User.js';
 import PreRegisteredStudent from '../models/PreRegisteredStudent.js';
+import Payment from '../models/Payment.js';
+import AppSettings from '../models/AppSettings.js';
 import mongoose from 'mongoose';
 
 // Lazy-load models to avoid circular deps
@@ -242,6 +244,236 @@ export const updatePreRegisteredStudent = async (req, res) => {
       data: { student },
     });
   } catch (err) {
+    res.status(500).json({ success: false, error: { message: err.message } });
+  }
+};
+
+
+// ========== PAYMENT MANAGEMENT ==========
+
+/**
+ * Get all payments (pending, approved, rejected)
+ * GET /api/admin/payments
+ */
+export const getAllPayments = async (req, res) => {
+  try {
+    const { status = 'all', page = 1, limit = 50 } = req.query;
+    const filter = {};
+    
+    if (status !== 'all') {
+      filter.status = status;
+    }
+
+    const payments = await Payment.find(filter)
+      .populate('userId', 'name email profileImage')
+      .populate('reviewedBy', 'name email')
+      .sort({ submittedAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(Number(limit));
+
+    const total = await Payment.countDocuments(filter);
+    const pendingCount = await Payment.countDocuments({ status: 'pending' });
+
+    res.json({
+      success: true,
+      data: { payments, total, pendingCount, page: Number(page) },
+    });
+  } catch (err) {
+    console.error('Get all payments error:', err);
+    res.status(500).json({ success: false, error: { message: err.message } });
+  }
+};
+
+/**
+ * Approve payment - grants user access
+ * PUT /api/admin/payments/:id/approve
+ */
+export const approvePayment = async (req, res) => {
+  try {
+    const { adminNotes } = req.body;
+    const payment = await Payment.findById(req.params.id);
+
+    if (!payment) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'Payment not found' },
+      });
+    }
+
+    console.log('Approving payment:', { id: req.params.id, currentStatus: payment.status });
+
+    if (payment.status !== 'pending') {
+      return res.status(400).json({
+        success: false,
+        error: { message: `Payment already ${payment.status}` },
+      });
+    }
+
+    // Update payment status
+    payment.status = 'approved';
+    payment.adminNotes = adminNotes || '';
+    payment.reviewedAt = new Date();
+    
+    // Use authenticated user if available, otherwise find admin
+    let reviewedById = req.user?._id;
+    if (!reviewedById) {
+      const adminUser = await User.findOne({ role: 'admin' });
+      reviewedById = adminUser?._id;
+    }
+    payment.reviewedBy = reviewedById;
+    
+    await payment.save();
+
+    console.log('Payment approved, now granting user access:', payment.userId);
+
+    // Grant user access by setting hasFreeAccess flag
+    const user = await User.findById(payment.userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'User not found' },
+      });
+    }
+
+    console.log('User found, updating premium status:', { userId: user._id, currentPremium: user.isPremium });
+    
+    // Set isPremium to true
+    user.isPremium = true;
+    
+    // Add to paidCourses array
+    user.paidCourses.push({
+      courseId: payment.courseId,
+      amount: payment.amount,
+      transactionId: payment.transactionId,
+      paidAt: new Date(),
+    });
+    
+    // Update totalPaid
+    user.totalPaid = (user.totalPaid || 0) + payment.amount;
+    
+    await user.save();
+
+    res.json({
+      success: true,
+      data: { payment },
+      message: 'Payment approved and access granted',
+    });
+  } catch (err) {
+    console.error('Approve payment error:', err);
+    res.status(500).json({ success: false, error: { message: err.message } });
+  }
+};
+
+/**
+ * Reject payment
+ * PUT /api/admin/payments/:id/reject
+ */
+export const rejectPayment = async (req, res) => {
+  try {
+    const { adminNotes } = req.body;
+    const payment = await Payment.findById(req.params.id);
+
+    if (!payment) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'Payment not found' },
+      });
+    }
+
+    if (payment.status !== 'pending') {
+      return res.status(400).json({
+        success: false,
+        error: { message: `Payment already ${payment.status}` },
+      });
+    }
+
+    // Update payment status
+    payment.status = 'rejected';
+    payment.adminNotes = adminNotes || '';
+    payment.reviewedAt = new Date();
+    
+    // Use authenticated user if available, otherwise find admin
+    let reviewedById = req.user?._id;
+    if (!reviewedById) {
+      const adminUser = await User.findOne({ role: 'admin' });
+      reviewedById = adminUser?._id;
+    }
+    payment.reviewedBy = reviewedById;
+    
+    await payment.save();
+
+    res.json({
+      success: true,
+      data: { payment },
+      message: 'Payment rejected',
+    });
+  } catch (err) {
+    console.error('Reject payment error:', err);
+    res.status(500).json({ success: false, error: { message: err.message } });
+  }
+};
+
+/**
+ * Get UPI settings
+ * GET /api/admin/upi-settings
+ */
+export const getUpiSettings = async (req, res) => {
+  try {
+    let setting = await AppSettings.findOne({ key: 'upi_id' });
+    
+    if (!setting) {
+      setting = await AppSettings.create({
+        key: 'upi_id',
+        value: '8269858259@upi',
+        description: 'UPI ID for payment QR code',
+      });
+    }
+
+    res.json({
+      success: true,
+      data: { upiId: setting.value },
+    });
+  } catch (err) {
+    console.error('Get UPI settings error:', err);
+    res.status(500).json({ success: false, error: { message: err.message } });
+  }
+};
+
+/**
+ * Update UPI settings
+ * PUT /api/admin/upi-settings
+ */
+export const updateUpiSettings = async (req, res) => {
+  try {
+    const { upiId } = req.body;
+
+    if (!upiId) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'UPI ID is required' },
+      });
+    }
+
+    let setting = await AppSettings.findOne({ key: 'upi_id' });
+    
+    if (setting) {
+      setting.value = upiId;
+      await setting.save();
+    } else {
+      setting = await AppSettings.create({
+        key: 'upi_id',
+        value: upiId,
+        description: 'UPI ID for payment QR code',
+      });
+    }
+
+    res.json({
+      success: true,
+      data: { upiId: setting.value },
+      message: 'UPI ID updated successfully',
+    });
+  } catch (err) {
+    console.error('Update UPI settings error:', err);
     res.status(500).json({ success: false, error: { message: err.message } });
   }
 };

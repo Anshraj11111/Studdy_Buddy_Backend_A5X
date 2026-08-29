@@ -20,8 +20,8 @@ class AuthService {
         throw new Error('Email already exists');
       }
 
-      // Validate school password for students against pre-registered data
-      if ((role === 'student' || !role) && schoolPassword) {
+      // Freemium Model: Validate school password ONLY if provided
+      if ((role === 'student' || !role) && schoolPassword && schoolName) {
         // Check if student is pre-registered by admin
         const preRegistered = await PreRegisteredStudent.findOne({ 
           email: email,
@@ -71,7 +71,7 @@ class AuthService {
         city: city || '',
       });
 
-      // Auto-join school channel for students (only if channel exists)
+      // Auto-join school channel for students (only if channel exists AND school info provided)
       if ((role === 'student' || !role) && schoolName && city) {
         await this.autoJoinSchoolChannel(user);
       }
@@ -137,9 +137,9 @@ class AuthService {
    */
   async login(email, password) {
     try {
-      // Find user by email - select only needed fields
+      // Find user by email - select only needed fields (including schoolPassword for freemium check)
       const user = await User.findOne({ email })
-        .select('_id name email role skills profileImage bannerImage headline bio address socialLinks education experience xp mentorCode password schoolName city')
+        .select('_id name email role skills profileImage bannerImage headline bio address socialLinks education experience xp mentorCode password schoolName schoolPassword city')
         .lean();
       if (!user) {
         throw new Error('Invalid credentials');

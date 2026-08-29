@@ -8,7 +8,12 @@ import {
   getPreRegisteredStudents,
   deletePreRegisteredStudent,
   updatePreRegisteredStudent,
-  getSchoolCodes
+  getSchoolCodes,
+  getAllPayments,
+  approvePayment,
+  rejectPayment,
+  getUpiSettings,
+  updateUpiSettings
 } from '../controllers/admin.controller.js';
 import { authenticate } from '../middleware/auth.middleware.js';
 
@@ -37,5 +42,14 @@ router.get('/pre-registered', getPreRegisteredStudents);
 router.get('/school-codes', getSchoolCodes);
 router.put('/pre-registered/:id', updatePreRegisteredStudent);
 router.delete('/pre-registered/:id', deletePreRegisteredStudent);
+
+// Payment management routes
+router.get('/payments', getAllPayments);
+router.put('/payments/:id/approve', approvePayment);
+router.put('/payments/:id/reject', rejectPayment);
+
+// UPI settings routes
+router.get('/upi-settings', getUpiSettings);
+router.put('/upi-settings', updateUpiSettings);
 
 export default router;
