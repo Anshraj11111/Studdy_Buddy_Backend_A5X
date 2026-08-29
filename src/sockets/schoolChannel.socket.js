@@ -131,40 +131,74 @@ export const setupSchoolChannelSocket = (io) => {
       try {
         const { userId, messageId, channelId, emoji } = data;
         
-        const message = await SchoolChannelMessage.findById(messageId);
+        console.log(`\n🔔 Reaction received: User ${userId} → ${emoji} on message ${messageId}`);
+        
+        // Fetch current message
+        let message = await SchoolChannelMessage.findById(messageId);
         if (!message) {
+          console.log('❌ Message not found');
           socket.emit('school-channel:error', { message: 'Message not found' });
           return;
         }
 
-        // WhatsApp-style reaction: one reaction per user
-        const existingReaction = message.reactions.find(
-          r => r.userId.toString() === userId && r.emoji === emoji
+        console.log(`📊 BEFORE: ${message.reactions.length} reactions total`);
+        
+        // Convert to plain object for easier manipulation
+        const userIdStr = String(userId);
+        let reactions = message.reactions.map(r => ({
+          emoji: r.emoji,
+          userId: String(r.userId)
+        }));
+        
+        console.log('   Current reactions:', reactions.map(r => `${r.emoji} by ${r.userId.substring(0, 8)}...`));
+
+        // Check if user already has this exact emoji
+        const hasThisEmoji = reactions.some(
+          r => r.userId === userIdStr && r.emoji === emoji
         );
 
-        if (existingReaction) {
-          // Remove reaction if clicking the same emoji (toggle off)
-          message.reactions = message.reactions.filter(
-            r => !(r.userId.toString() === userId && r.emoji === emoji)
+        if (hasThisEmoji) {
+          // Toggle OFF - remove this specific reaction
+          reactions = reactions.filter(
+            r => !(r.userId === userIdStr && r.emoji === emoji)
           );
+          console.log(`❌ Toggled OFF: Removed ${emoji}`);
         } else {
-          // Remove any existing reaction from this user first (WhatsApp style)
-          message.reactions = message.reactions.filter(
-            r => r.userId.toString() !== userId
-          );
+          // Remove ALL existing reactions from this user
+          const beforeCount = reactions.length;
+          reactions = reactions.filter(r => r.userId !== userIdStr);
+          console.log(`🗑️ Removed ${beforeCount - reactions.length} old reactions from this user`);
+          
           // Add new reaction
-          message.reactions.push({ emoji, userId });
+          reactions.push({ emoji, userId: userIdStr });
+          console.log(`✅ Added new: ${emoji}`);
         }
 
-        await message.save();
-        await message.populate('sender', 'name profileImage role');
+        console.log(`📊 AFTER: ${reactions.length} reactions total`);
+        console.log('   New reactions:', reactions.map(r => `${r.emoji} by ${r.userId.substring(0, 8)}...`));
+
+        // Direct MongoDB update - bypasses Mongoose middleware issues
+        const updated = await SchoolChannelMessage.findByIdAndUpdate(
+          messageId,
+          { $set: { reactions: reactions } },
+          { new: true }
+        ).populate('sender', 'name profileImage role');
+
+        if (!updated) {
+          console.log('❌ Failed to update message');
+          socket.emit('school-channel:error', { message: 'Failed to update' });
+          return;
+        }
+
+        console.log(`✅ Database updated successfully`);
+        console.log(`📊 VERIFIED: ${updated.reactions.length} reactions in DB\n`);
 
         // Broadcast reaction update
-        io.to(channelId).emit('school-channel:reaction-updated', message);
+        io.to(channelId).emit('school-channel:reaction-updated', updated);
         
-        console.log(`👍 Reaction ${emoji} toggled on message ${messageId}`);
+        console.log(`📡 Broadcast complete to channel ${channelId}\n`);
       } catch (error) {
-        console.error('Error adding reaction:', error);
+        console.error('❌ Error adding reaction:', error);
         socket.emit('school-channel:error', { message: 'Failed to add reaction' });
       }
     });

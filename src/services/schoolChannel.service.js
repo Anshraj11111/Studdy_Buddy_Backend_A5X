@@ -258,35 +258,59 @@ class SchoolChannelService {
    */
   async addReaction(userId, messageId, emoji) {
     try {
+      console.log(`\n🔔 REST API Reaction: User ${userId} → ${emoji} on message ${messageId}`);
+      
+      // Fetch current message
       const message = await SchoolChannelMessage.findById(messageId);
       if (!message) {
         throw new Error('Message not found');
       }
 
-      // Check if user already reacted with this emoji
-      const existingReaction = message.reactions.find(
-        r => r.userId.toString() === userId && r.emoji === emoji
+      console.log(`📊 BEFORE: ${message.reactions.length} reactions`);
+
+      // Convert to plain array for manipulation
+      const userIdStr = String(userId);
+      let reactions = message.reactions.map(r => ({
+        emoji: r.emoji,
+        userId: String(r.userId)
+      }));
+
+      // Check if user already has this exact emoji
+      const hasThisEmoji = reactions.some(
+        r => r.userId === userIdStr && r.emoji === emoji
       );
 
-      if (existingReaction) {
-        // Remove reaction if clicking the same emoji (toggle off)
-        message.reactions = message.reactions.filter(
-          r => !(r.userId.toString() === userId && r.emoji === emoji)
+      if (hasThisEmoji) {
+        // Toggle OFF - remove this reaction
+        reactions = reactions.filter(
+          r => !(r.userId === userIdStr && r.emoji === emoji)
         );
+        console.log(`❌ Toggled OFF: Removed ${emoji}`);
       } else {
-        // Remove any existing reaction from this user first (WhatsApp style - one reaction per user)
-        message.reactions = message.reactions.filter(
-          r => r.userId.toString() !== userId
-        );
+        // Remove ALL existing reactions from this user first (WhatsApp style)
+        const beforeCount = reactions.length;
+        reactions = reactions.filter(r => r.userId !== userIdStr);
+        console.log(`🗑️ Removed ${beforeCount - reactions.length} old reactions`);
+        
         // Add new reaction
-        message.reactions.push({ emoji, userId });
+        reactions.push({ emoji, userId: userIdStr });
+        console.log(`✅ Added new: ${emoji}`);
       }
 
-      await message.save();
-      await message.populate('sender', 'name profileImage role');
+      console.log(`📊 AFTER: ${reactions.length} reactions`);
 
-      return message;
+      // Direct MongoDB update
+      const updated = await SchoolChannelMessage.findByIdAndUpdate(
+        messageId,
+        { $set: { reactions: reactions } },
+        { new: true }
+      ).populate('sender', 'name profileImage role');
+
+      console.log(`✅ Database updated via REST API\n`);
+
+      return updated;
     } catch (error) {
+      console.error('❌ Error in addReaction:', error);
       throw error;
     }
   }
