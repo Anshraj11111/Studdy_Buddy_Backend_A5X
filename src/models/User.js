@@ -153,6 +153,23 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    // Password reset fields
+    passwordResetCode: {
+      type: String,
+      default: null,
+    },
+    passwordResetExpiry: {
+      type: Date,
+      default: null,
+    },
+    passwordResetAttempts: {
+      type: Number,
+      default: 0,
+    },
+    passwordResetLastAttempt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,

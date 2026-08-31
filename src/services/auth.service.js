@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import SchoolChannel from '../models/SchoolChannel.js';
 import PreRegisteredStudent from '../models/PreRegisteredStudent.js';
+import { sendPasswordResetEmail, sendPasswordChangedEmail } from '../config/email.js';
 
 class AuthService {
   /**
@@ -147,6 +148,7 @@ class AuthService {
 
       // Compare password
       const isPasswordValid = await this.comparePassword(password, user.password);
+      
       if (!isPasswordValid) {
         throw new Error('Invalid credentials');
       }
@@ -279,6 +281,137 @@ class AuthService {
     } catch (error) {
       throw error;
     }
+  }
+
+  /**
+   * Generate password reset code and store in user document
+   * @param {String} email - User email
+   * @returns {Promise<Object>} Result with success message
+   */
+  async generatePasswordResetCode(email) {
+    const user = await User.findOne({ email });
+    
+    if (!user) {
+      const error = new Error('No account found with this email');
+      error.status = 404;
+      throw error;
+    }
+
+    // Generate 6-digit code
+    const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    // Store code and expiry in user document (expires in 10 minutes)
+    user.passwordResetCode = resetCode;
+    user.passwordResetExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    user.passwordResetAttempts = 0; // Reset attempts counter
+    await user.save();
+
+    // Send email with reset code
+    try {
+      await sendPasswordResetEmail(email, user.name, resetCode);
+      console.log(`✅ Password reset code sent to ${email}`);
+    } catch (emailError) {
+      console.error('Failed to send password reset email:', emailError);
+      // Don't throw error - code is still valid, user might check console logs in dev
+    }
+    
+    return {
+      message: 'If an account exists with this email, a password reset code has been sent.',
+      // PRODUCTION: Never return the actual code
+      // Code is only sent via email for security
+    };
+  }
+
+  /**
+   * Reset user password with verification code
+   * @param {String} email - User email
+   * @param {String} code - Reset code
+   * @param {String} newPassword - New password
+   */
+  async resetPassword(email, code, newPassword) {
+    const user = await User.findOne({ email });
+    
+    if (!user) {
+      const error = new Error('No account found with this email');
+      error.status = 404;
+      throw error;
+    }
+
+    // Check if code exists and hasn't expired
+    if (!user.passwordResetCode || !user.passwordResetExpiry) {
+      const error = new Error('No reset code found. Please request a new one.');
+      error.status = 400;
+      throw error;
+    }
+
+    if (new Date() > user.passwordResetExpiry) {
+      // Clear expired code
+      user.passwordResetCode = undefined;
+      user.passwordResetExpiry = undefined;
+      user.passwordResetAttempts = 0;
+      await user.save();
+      
+      const error = new Error('Reset code has expired. Please request a new one.');
+      error.status = 400;
+      throw error;
+    }
+
+    // Track failed attempts to prevent brute force
+    if (user.passwordResetAttempts >= 5) {
+      // Lock after 5 failed attempts
+      user.passwordResetCode = undefined;
+      user.passwordResetExpiry = undefined;
+      user.passwordResetAttempts = 0;
+      await user.save();
+      
+      const error = new Error('Too many failed attempts. Please request a new reset code.');
+      error.status = 429;
+      throw error;
+    }
+
+    // Verify code
+    if (user.passwordResetCode !== code) {
+      // Increment failed attempts
+      user.passwordResetAttempts += 1;
+      user.passwordResetLastAttempt = new Date();
+      await user.save();
+      
+      const error = new Error(`Invalid reset code. ${5 - user.passwordResetAttempts} attempts remaining.`);
+      error.status = 400;
+      throw error;
+    }
+
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    
+    // Update password and clear reset fields
+    user.password = hashedPassword;
+    user.passwordResetCode = undefined;
+    user.passwordResetExpiry = undefined;
+    user.passwordResetAttempts = 0;
+    user.passwordResetLastAttempt = undefined;
+    
+    try {
+      await user.save();
+      console.log(`✅ Password reset completed for ${email}`);
+    } catch (saveError) {
+      console.error(`❌ Failed to save password update:`, saveError);
+      throw new Error('Failed to update password in database');
+    }
+
+    // Send confirmation email
+    try {
+      await sendPasswordChangedEmail(email, user.name);
+      console.log(`✅ Password changed confirmation sent to ${email}`);
+    } catch (emailError) {
+      console.error('Failed to send password changed email:', emailError);
+      // Don't throw - password was successfully changed
+    }
+
+    // Log security event
+    console.log(`🔐 Password reset completed for user: ${email} at ${new Date().toISOString()}`);
+
+    return { message: 'Password reset successful' };
   }
 }
 

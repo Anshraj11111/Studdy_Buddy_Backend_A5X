@@ -241,9 +241,107 @@ export const updateProfile = async (req, res) => {
   }
 };
 
+/**
+ * Forgot Password - Send reset code to email
+ * POST /api/auth/forgot-password
+ */
+export const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'Email is required' },
+      });
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'Invalid email format' },
+      });
+    }
+
+    // Log request for security monitoring
+    console.log(`🔐 Password reset requested for: ${email} from IP: ${req.ip}`);
+
+    const result = await authService.generatePasswordResetCode(email);
+    
+    // Always return same message to prevent email enumeration
+    res.json({
+      success: true,
+      message: 'If an account exists with this email, a password reset code has been sent.',
+      data: result,
+    });
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    
+    // Always return generic message to prevent email enumeration
+    res.json({
+      success: true,
+      message: 'If an account exists with this email, a password reset code has been sent.',
+    });
+  }
+};
+
+/**
+ * Reset Password - Verify code and update password
+ * POST /api/auth/reset-password
+ */
+export const resetPassword = async (req, res) => {
+  try {
+    const { email, code, newPassword } = req.body;
+
+    if (!email || !code || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'Email, code, and new password are required' },
+      });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'Password must be at least 6 characters' },
+      });
+    }
+
+    // Validate code format (6 digits)
+    if (!/^\d{6}$/.test(code)) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'Invalid code format' },
+      });
+    }
+
+    // Log attempt for security monitoring
+    console.log(`🔐 Password reset attempt for: ${email} from IP: ${req.ip}`);
+
+    await authService.resetPassword(email, code, newPassword);
+    
+    res.json({
+      success: true,
+      message: 'Password reset successful! You can now login with your new password.',
+    });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    
+    // Return specific error for better UX (code already validated on backend)
+    res.status(error.status || 500).json({
+      success: false,
+      error: { message: error.message || 'Failed to reset password' },
+    });
+  }
+};
+
 export default {
   register,
   login,
   getProfile,
   updateProfile,
+  forgotPassword,
+  resetPassword,
 };
