@@ -33,8 +33,7 @@ export const authenticate = async (req, res, next) => {
     }
 
     // Only fetch user from DB if we need full user object
-    // Use lean() for faster query - returns plain JS object
-    const user = await User.findById(decoded.userId).lean();
+    const user = await User.findById(decoded.userId);
     if (!user) {
       return res.status(401).json({
         success: false,
@@ -42,7 +41,8 @@ export const authenticate = async (req, res, next) => {
       });
     }
 
-    req.user = user;
+    // Convert to JSON to apply toJSON transformation (includes hasFreeAccess)
+    req.user = user.toJSON();
     next();
   } catch (error) {
     return res.status(500).json({
@@ -82,4 +82,37 @@ export const authorize = (...roles) => {
   };
 };
 
-export default { authenticate, authorize };
+/**
+ * Optional authentication middleware
+ * Attaches user if token is valid, but doesn't fail if missing
+ */
+export const optionalAuth = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      // No token - continue without user
+      return next();
+    }
+
+    const token = authHeader.substring(7);
+
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const user = await User.findById(decoded.userId);
+      
+      if (user) {
+        req.user = user.toJSON(); // Apply toJSON transformation
+      }
+    } catch (err) {
+      // Token invalid - continue without user (don't fail)
+    }
+
+    next();
+  } catch (error) {
+    // Error in middleware - continue without user
+    next();
+  }
+};
+
+export default { authenticate, authorize, optionalAuth };
