@@ -69,26 +69,38 @@ export const getMyPayments = async (req, res) => {
 };
 
 /**
- * Get UPI ID for QR code generation
+ * Get UPI ID and payment price for QR code generation
  * GET /api/payments/upi-settings
  */
 export const getUpiSettings = async (req, res) => {
   try {
     // Get UPI ID from settings
-    let setting = await AppSettings.findOne({ key: 'upi_id' });
+    let upiSetting = await AppSettings.findOne({ key: 'upi_id' });
+    let priceSetting = await AppSettings.findOne({ key: 'payment_price' });
     
-    // If not found, create default
-    if (!setting) {
-      setting = await AppSettings.create({
+    // If not found, create defaults
+    if (!upiSetting) {
+      upiSetting = await AppSettings.create({
         key: 'upi_id',
         value: '8269858259@upi',
         description: 'UPI ID for payment QR code',
       });
     }
 
+    if (!priceSetting) {
+      priceSetting = await AppSettings.create({
+        key: 'payment_price',
+        value: '500',
+        description: 'Price per course in INR',
+      });
+    }
+
     res.status(200).json({
       success: true,
-      data: { upiId: setting.value },
+      data: { 
+        upiId: upiSetting.value,
+        paymentPrice: parseInt(priceSetting.value) || 500,
+      },
     });
   } catch (error) {
     console.error('Get UPI settings error:', error);

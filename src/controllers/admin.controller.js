@@ -419,19 +419,31 @@ export const rejectPayment = async (req, res) => {
  */
 export const getUpiSettings = async (req, res) => {
   try {
-    let setting = await AppSettings.findOne({ key: 'upi_id' });
+    let upiSetting = await AppSettings.findOne({ key: 'upi_id' });
+    let priceSetting = await AppSettings.findOne({ key: 'payment_price' });
     
-    if (!setting) {
-      setting = await AppSettings.create({
+    if (!upiSetting) {
+      upiSetting = await AppSettings.create({
         key: 'upi_id',
         value: '8269858259@upi',
         description: 'UPI ID for payment QR code',
       });
     }
 
+    if (!priceSetting) {
+      priceSetting = await AppSettings.create({
+        key: 'payment_price',
+        value: '500',
+        description: 'Price per course in INR',
+      });
+    }
+
     res.json({
       success: true,
-      data: { upiId: setting.value },
+      data: { 
+        upiId: upiSetting.value,
+        paymentPrice: parseInt(priceSetting.value) || 500,
+      },
     });
   } catch (err) {
     console.error('Get UPI settings error:', err);
@@ -445,32 +457,63 @@ export const getUpiSettings = async (req, res) => {
  */
 export const updateUpiSettings = async (req, res) => {
   try {
-    const { upiId } = req.body;
+    const { upiId, paymentPrice } = req.body;
 
-    if (!upiId) {
+    if (!upiId && paymentPrice === undefined) {
       return res.status(400).json({
         success: false,
-        error: { message: 'UPI ID is required' },
+        error: { message: 'UPI ID or payment price is required' },
       });
     }
 
-    let setting = await AppSettings.findOne({ key: 'upi_id' });
-    
-    if (setting) {
-      setting.value = upiId;
-      await setting.save();
-    } else {
-      setting = await AppSettings.create({
-        key: 'upi_id',
-        value: upiId,
-        description: 'UPI ID for payment QR code',
-      });
+    const updates = {};
+
+    // Update UPI ID
+    if (upiId) {
+      let upiSetting = await AppSettings.findOne({ key: 'upi_id' });
+      
+      if (upiSetting) {
+        upiSetting.value = upiId;
+        await upiSetting.save();
+      } else {
+        upiSetting = await AppSettings.create({
+          key: 'upi_id',
+          value: upiId,
+          description: 'UPI ID for payment QR code',
+        });
+      }
+      updates.upiId = upiSetting.value;
+    }
+
+    // Update payment price
+    if (paymentPrice !== undefined) {
+      const price = parseInt(paymentPrice);
+      if (isNaN(price) || price < 0) {
+        return res.status(400).json({
+          success: false,
+          error: { message: 'Invalid payment price' },
+        });
+      }
+
+      let priceSetting = await AppSettings.findOne({ key: 'payment_price' });
+      
+      if (priceSetting) {
+        priceSetting.value = price.toString();
+        await priceSetting.save();
+      } else {
+        priceSetting = await AppSettings.create({
+          key: 'payment_price',
+          value: price.toString(),
+          description: 'Price per course in INR',
+        });
+      }
+      updates.paymentPrice = price;
     }
 
     res.json({
       success: true,
-      data: { upiId: setting.value },
-      message: 'UPI ID updated successfully',
+      data: updates,
+      message: 'Settings updated successfully',
     });
   } catch (err) {
     console.error('Update UPI settings error:', err);
