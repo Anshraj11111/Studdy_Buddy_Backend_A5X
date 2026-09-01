@@ -88,6 +88,17 @@ const BLOCKED_TERMS = [
   'chutad', 'gaand mara', 'maa chuda',
   'bhag bsdk', 'bhag bc', 'nikal',
   'teri maa ka', 'teri behen ka',
+  // Additional variations
+  'madar', 'madarchut', 'bhenke', 'bhnk',
+  'chu***', 'rand*', 'g**d',
+  'abe', 'oye', 'saale', 'kamine',
+  'bhosad', 'bhosd', 'bsdi',
+  'maa ki aankh', 'maa ki', 'maa ko',
+  'tatte', 'tattu',
+  'fuddi', 'phuddi',
+  'bhad mein jao', 'bhad me jao',
+  'chup kar', 'shut up',
+  'gali', 'gaali',
 
   // ── Threat / harassment ──────────────────────────────────────────────────
   'i will kill', 'i will hurt', 'i will find you',
