@@ -88,7 +88,7 @@ const BLOCKED_TERMS = [
   'chutad', 'gaand mara', 'maa chuda',
   'bhag bsdk', 'bhag bc', 'nikal',
   'teri maa ka', 'teri behen ka',
-  // Additional variations
+  // ── Additional variations
   'madar', 'madarchut', 'bhenke', 'bhnk',
   'chu***', 'rand*', 'g**d',
   'abe', 'oye', 'saale', 'kamine',
@@ -99,6 +99,22 @@ const BLOCKED_TERMS = [
   'bhad mein jao', 'bhad me jao',
   'chup kar', 'shut up',
   'gali', 'gaali',
+
+  // ── New words found in posts ─────────────────────────────────────────────
+  'bokachoda', 'boka choda', 'bkc',
+  'sisterfucker', 'sister fucker',
+  'burchoodi', 'burchoddi', 'burchodi',
+  'bhadwaaaaa', 'bhadwa', 'bhadwe', 'bhadwee',
+  'betichood', 'betichodd', 'beti chood',
+  'randwee', 'randwe',
+  'machhar ki jhat', 'jhat',
+  'badmosh',
+  'nunu sad jaye',
+  'bhad',
+  'chutmarani', 'chutmaran',
+  'chodde', 'chode',
+  'maar de',
+  'teri gaand', 'gaand maar',
 
   // ── Threat / harassment ──────────────────────────────────────────────────
   'i will kill', 'i will hurt', 'i will find you',
