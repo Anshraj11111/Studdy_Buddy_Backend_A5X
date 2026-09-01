@@ -14,6 +14,9 @@ router.get('/topic/:topic', resourceController.getResourcesByTopic);
 // Must be before /:id to avoid being shadowed
 router.get('/watch/:token', resourceController.watchVideo);
 
+// Admin routes - must be before /:id routes
+router.delete('/clear-all', authMiddleware.authenticate, resourceController.clearAllResources);
+
 router.get('/:id', resourceController.getResourceById);
 
 // Protected routes

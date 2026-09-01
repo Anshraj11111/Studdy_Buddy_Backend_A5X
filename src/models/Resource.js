@@ -55,6 +55,29 @@ const resourceSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    // NEW FIELDS FOR COURSE STRUCTURE
+    courseId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Course',
+      default: null, // null for standalone resources
+    },
+    moduleId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Module',
+      default: null,
+    },
+    order: {
+      type: Number,
+      default: 0, // Order within module
+    },
+    duration: {
+      type: String, // e.g., "58m", "1h 04m"
+      default: '',
+    },
+    lectureDate: {
+      type: Date,
+      default: null,
+    },
   },
   { timestamps: true }
 );
@@ -63,5 +86,6 @@ const resourceSchema = new mongoose.Schema(
 resourceSchema.index({ topic: 1, createdAt: -1 });
 resourceSchema.index({ uploadedBy: 1 });
 resourceSchema.index({ tags: 1 });
+resourceSchema.index({ courseId: 1, moduleId: 1, order: 1 }); // NEW: For course structure
 
 export default mongoose.model('Resource', resourceSchema);

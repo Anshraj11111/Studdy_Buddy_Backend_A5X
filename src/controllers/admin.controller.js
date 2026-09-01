@@ -520,3 +520,392 @@ export const updateUpiSettings = async (req, res) => {
     res.status(500).json({ success: false, error: { message: err.message } });
   }
 };
+
+// ========== COURSE MANAGEMENT ==========
+
+import Course from '../models/Course.js';
+import Module from '../models/Module.js';
+
+/**
+ * Get all courses for admin
+ * GET /api/admin/courses
+ */
+export const getAllCourses = async (req, res) => {
+  try {
+    const { topic, search, page = 1, limit = 50 } = req.query;
+    const filter = {};
+    
+    if (topic) filter.topic = topic;
+    if (search) {
+      filter.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } },
+      ];
+    }
+
+    const courses = await Course.find(filter)
+      .populate('createdBy', 'name email')
+      .populate('modules')
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(Number(limit));
+
+    const total = await Course.countDocuments(filter);
+
+    res.json({
+      success: true,
+      data: { courses, total, page: Number(page) },
+    });
+  } catch (err) {
+    console.error('Get all courses error:', err);
+    res.status(500).json({ success: false, error: { message: err.message } });
+  }
+};
+
+/**
+ * Create new course
+ * POST /api/admin/courses
+ */
+export const createCourse = async (req, res) => {
+  try {
+    const courseData = req.body;
+    
+    // Use authenticated user if available
+    let createdById = req.user?._id;
+    if (!createdById) {
+      const mentorUser = await User.findOne({ role: 'mentor' });
+      if (!mentorUser) {
+        const anyUser = await User.findOne();
+        createdById = anyUser?._id;
+      } else {
+        createdById = mentorUser._id;
+      }
+    }
+    
+    courseData.createdBy = createdById;
+    
+    const course = await Course.create(courseData);
+
+    res.status(201).json({
+      success: true,
+      data: { course },
+      message: 'Course created successfully',
+    });
+  } catch (err) {
+    console.error('Create course error:', err);
+    res.status(500).json({ success: false, error: { message: err.message } });
+  }
+};
+
+/**
+ * Update course
+ * PUT /api/admin/courses/:id
+ */
+export const updateCourse = async (req, res) => {
+  try {
+    const course = await Course.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true, runValidators: true }
+    );
+
+    if (!course) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'Course not found' },
+      });
+    }
+
+    res.json({
+      success: true,
+      data: { course },
+      message: 'Course updated successfully',
+    });
+  } catch (err) {
+    console.error('Update course error:', err);
+    res.status(500).json({ success: false, error: { message: err.message } });
+  }
+};
+
+/**
+ * Delete course
+ * DELETE /api/admin/courses/:id
+ */
+export const deleteCourse = async (req, res) => {
+  try {
+    const course = await Course.findByIdAndDelete(req.params.id);
+
+    if (!course) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'Course not found' },
+      });
+    }
+
+    // Delete associated modules
+    await Module.deleteMany({ courseId: course._id });
+
+    res.json({
+      success: true,
+      data: { message: 'Course deleted successfully' },
+    });
+  } catch (err) {
+    console.error('Delete course error:', err);
+    res.status(500).json({ success: false, error: { message: err.message } });
+  }
+};
+
+/**
+ * Create module in course
+ * POST /api/admin/courses/:courseId/modules
+ */
+export const createModule = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    const moduleData = { ...req.body, courseId };
+
+    const module = await Module.create(moduleData);
+
+    // Add module to course
+    await Course.findByIdAndUpdate(courseId, {
+      $push: { modules: module._id },
+    });
+
+    res.status(201).json({
+      success: true,
+      data: { module },
+      message: 'Module created successfully',
+    });
+  } catch (err) {
+    console.error('Create module error:', err);
+    res.status(500).json({ success: false, error: { message: err.message } });
+  }
+};
+
+/**
+ * Update module
+ * PUT /api/admin/modules/:id
+ */
+export const updateModule = async (req, res) => {
+  try {
+    const module = await Module.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true, runValidators: true }
+    );
+
+    if (!module) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'Module not found' },
+      });
+    }
+
+    res.json({
+      success: true,
+      data: { module },
+      message: 'Module updated successfully',
+    });
+  } catch (err) {
+    console.error('Update module error:', err);
+    res.status(500).json({ success: false, error: { message: err.message } });
+  }
+};
+
+/**
+ * Delete module
+ * DELETE /api/admin/modules/:id
+ */
+export const deleteModule = async (req, res) => {
+  try {
+    const module = await Module.findByIdAndDelete(req.params.id);
+
+    if (!module) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'Module not found' },
+      });
+    }
+
+    // Remove module from course
+    await Course.findByIdAndUpdate(module.courseId, {
+      $pull: { modules: module._id },
+    });
+
+    res.json({
+      success: true,
+      data: { message: 'Module deleted successfully' },
+    });
+  } catch (err) {
+    console.error('Delete module error:', err);
+    res.status(500).json({ success: false, error: { message: err.message } });
+  }
+};
+
+import Resource from '../models/Resource.js';
+
+/**
+ * Get course modules with lectures
+ * GET /api/admin/courses/:courseId/modules
+ */
+export const getCourseModules = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    
+    const modules = await Module.find({ courseId })
+      .populate('resources')
+      .sort({ order: 1 });
+
+    res.json({
+      success: true,
+      data: { modules },
+    });
+  } catch (err) {
+    console.error('Get course modules error:', err);
+    res.status(500).json({ success: false, error: { message: err.message } });
+  }
+};
+
+/**
+ * Create module
+ * POST /api/admin/modules
+ */
+export const createModuleStandalone = async (req, res) => {
+  try {
+    const moduleData = req.body;
+    const module = await Module.create(moduleData);
+
+    // Add module to course
+    await Course.findByIdAndUpdate(moduleData.courseId, {
+      $push: { modules: module._id },
+    });
+
+    res.status(201).json({
+      success: true,
+      data: { module },
+      message: 'Module created successfully',
+    });
+  } catch (err) {
+    console.error('Create module error:', err);
+    res.status(500).json({ success: false, error: { message: err.message } });
+  }
+};
+
+/**
+ * Create lecture (resource) in module
+ * POST /api/admin/lectures
+ */
+export const createLecture = async (req, res) => {
+  try {
+    const lectureData = req.body;
+    
+    // Use authenticated user if available
+    let uploadedById = req.user?._id;
+    if (!uploadedById) {
+      const mentorUser = await User.findOne({ role: 'mentor' });
+      if (!mentorUser) {
+        const anyUser = await User.findOne();
+        uploadedById = anyUser?._id;
+      } else {
+        uploadedById = mentorUser._id;
+      }
+    }
+    
+    lectureData.uploadedBy = uploadedById;
+    lectureData.isPublic = false; // Course lectures are not public by default
+    
+    const lecture = await Resource.create(lectureData);
+
+    // Add lecture to module
+    await Module.findByIdAndUpdate(lectureData.moduleId, {
+      $push: { resources: lecture._id },
+      $inc: { videoCount: 1 },
+    });
+
+    // Update course totalVideos count
+    if (lectureData.courseId) {
+      await Course.findByIdAndUpdate(lectureData.courseId, {
+        $inc: { totalVideos: 1 },
+      });
+    }
+
+    res.status(201).json({
+      success: true,
+      data: { lecture },
+      message: 'Lecture created successfully',
+    });
+  } catch (err) {
+    console.error('Create lecture error:', err);
+    res.status(500).json({ success: false, error: { message: err.message } });
+  }
+};
+
+/**
+ * Update lecture
+ * PUT /api/admin/lectures/:id
+ */
+export const updateLecture = async (req, res) => {
+  try {
+    const lecture = await Resource.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true, runValidators: true }
+    );
+
+    if (!lecture) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'Lecture not found' },
+      });
+    }
+
+    res.json({
+      success: true,
+      data: { lecture },
+      message: 'Lecture updated successfully',
+    });
+  } catch (err) {
+    console.error('Update lecture error:', err);
+    res.status(500).json({ success: false, error: { message: err.message } });
+  }
+};
+
+/**
+ * Delete lecture
+ * DELETE /api/admin/lectures/:id
+ */
+export const deleteLecture = async (req, res) => {
+  try {
+    const lecture = await Resource.findByIdAndDelete(req.params.id);
+
+    if (!lecture) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'Lecture not found' },
+      });
+    }
+
+    // Remove lecture from module
+    if (lecture.moduleId) {
+      await Module.findByIdAndUpdate(lecture.moduleId, {
+        $pull: { resources: lecture._id },
+        $inc: { videoCount: -1 },
+      });
+    }
+
+    // Update course totalVideos count
+    if (lecture.courseId) {
+      await Course.findByIdAndUpdate(lecture.courseId, {
+        $inc: { totalVideos: -1 },
+      });
+    }
+
+    res.json({
+      success: true,
+      data: { message: 'Lecture deleted successfully' },
+    });
+  } catch (err) {
+    console.error('Delete lecture error:', err);
+    res.status(500).json({ success: false, error: { message: err.message } });
+  }
+};

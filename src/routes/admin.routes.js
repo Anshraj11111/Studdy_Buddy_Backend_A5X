@@ -13,7 +13,21 @@ import {
   approvePayment,
   rejectPayment,
   getUpiSettings,
-  updateUpiSettings
+  updateUpiSettings,
+  // Course Management
+  getAllCourses,
+  createCourse,
+  updateCourse,
+  deleteCourse,
+  getCourseModules,
+  createModule,
+  createModuleStandalone,
+  updateModule,
+  deleteModule,
+  // Lecture Management
+  createLecture,
+  updateLecture,
+  deleteLecture,
 } from '../controllers/admin.controller.js';
 import { authenticate } from '../middleware/auth.middleware.js';
 
@@ -51,5 +65,23 @@ router.put('/payments/:id/reject', rejectPayment);
 // UPI settings routes
 router.get('/upi-settings', getUpiSettings);
 router.put('/upi-settings', updateUpiSettings);
+
+// Course management routes
+router.get('/courses', getAllCourses);
+router.post('/courses', createCourse);
+router.put('/courses/:id', updateCourse);
+router.delete('/courses/:id', deleteCourse);
+router.get('/courses/:courseId/modules', getCourseModules);
+
+// Module management routes
+router.post('/courses/:courseId/modules', createModule);
+router.post('/modules', createModuleStandalone);
+router.put('/modules/:id', updateModule);
+router.delete('/modules/:id', deleteModule);
+
+// Lecture management routes
+router.post('/lectures', createLecture);
+router.put('/lectures/:id', updateLecture);
+router.delete('/lectures/:id', deleteLecture);
 
 export default router;

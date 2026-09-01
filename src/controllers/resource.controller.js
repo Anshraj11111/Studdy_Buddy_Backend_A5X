@@ -1,6 +1,9 @@
 import resourceService from '../services/resource.service.js';
 import { addXP } from '../services/xp.service.js';
 import { generateVideoToken, verifyVideoToken } from '../utils/videoToken.js';
+import Resource from '../models/Resource.js';
+import Module from '../models/Module.js';
+import CourseEnrollment from '../models/CourseEnrollment.js';
 
 // Helper — extract YouTube video ID from a stored URL
 function extractYouTubeId(url) {
@@ -23,6 +26,85 @@ function sanitizeResource(resource) {
   delete obj.fileUrl;  // Never expose raw URL
   return obj;
 }
+
+/**
+ * Clear all resources (Admin only)
+ * DELETE /api/resources/clear-all
+ */
+export const clearAllResources = async (req, res) => {
+  try {
+    // Check if user is admin (you may need to adjust this check based on your auth system)
+    if (req.user?.role !== 'admin' && req.user?.role !== 'mentor') {
+      return res.status(403).json({
+        success: false,
+        error: {
+          message: 'Access denied. Admin privileges required.',
+          code: 'INSUFFICIENT_PERMISSIONS',
+        },
+      });
+    }
+
+    // Get count before deletion
+    const resourceCount = await Resource.countDocuments();
+
+    if (resourceCount === 0) {
+      return res.status(200).json({
+        success: true,
+        data: {
+          message: 'No resources found. Database is already clean.',
+          deleted: 0,
+          modulesUpdated: 0,
+          enrollmentsUpdated: 0
+        },
+      });
+    }
+
+    // Step 1: Clear resource references from modules
+    const moduleUpdateResult = await Module.updateMany(
+      { resources: { $exists: true, $ne: [] } },
+      { $set: { resources: [] } }
+    );
+
+    // Step 2: Clear resource references from course enrollments
+    const enrollmentUpdateResult = await CourseEnrollment.updateMany(
+      {
+        $or: [
+          { completedVideos: { $exists: true, $ne: [] } },
+          { lastWatchedVideo: { $exists: true } }
+        ]
+      },
+      {
+        $set: { 
+          completedVideos: [],
+          lastWatchedVideo: null
+        }
+      }
+    );
+
+    // Step 3: Delete all resources
+    const deleteResult = await Resource.deleteMany({});
+
+    res.status(200).json({
+      success: true,
+      data: {
+        message: `Successfully cleared ${deleteResult.deletedCount} resources`,
+        deleted: deleteResult.deletedCount,
+        modulesUpdated: moduleUpdateResult.modifiedCount,
+        enrollmentsUpdated: enrollmentUpdateResult.modifiedCount
+      },
+    });
+
+  } catch (error) {
+    console.error('Clear resources error:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Failed to clear resources',
+        code: 'CLEAR_RESOURCES_ERROR',
+      },
+    });
+  }
+};
 
 /**
  * Create a new resource
@@ -553,4 +635,5 @@ export default {
   getVideoToken,
   watchVideo,
   uploadNotes,
+  clearAllResources,
 };
