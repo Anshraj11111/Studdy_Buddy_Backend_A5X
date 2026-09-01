@@ -2,156 +2,174 @@
  * Content filter — blocks profanity, slurs, romantic/sexual language,
  * and offensive content in English and Hindi/Hinglish.
  *
- * Strategy: build a single regex from all blocked terms, test the
- * normalised message (lowercased, leet-speak collapsed) against it.
+ * Strategy: Two-stage matching:
+ * 1. EXACT_TERMS: full phrase matching (for multi-word phrases)
+ * 2. STEM_TERMS:  prefix/stem matching (catches all variations like
+ *    chutiya/chutiye/chutiyapan/chutiyagiri automatically)
+ *
  * Returns { blocked: boolean, reason: string }.
  */
 
 // ---------------------------------------------------------------------------
-// Word list
+// Stage 1: Exact / phrase terms (matched as substrings after normalisation)
 // ---------------------------------------------------------------------------
-
-const BLOCKED_TERMS = [
-  // ── English profanity & slurs ────────────────────────────────────────────
-  'fuck', 'fucker', 'fucking', 'fucked', 'fucks', 'f.u.c.k', 'fuk', 'fck',
-  'shit', 'shits', 'shitty', 'bullshit', 'sht',
-  'bitch', 'bitches', 'bitching', 'btch',
-  'ass', 'asshole', 'arsehole', 'arse',
-  'bastard', 'bastards',
-  'cunt', 'cunts',
-  'dick', 'dicks', 'dickhead',
-  'cock', 'cocks', 'cocksucker',
-  'pussy', 'pussies',
-  'whore', 'whores',
-  'slut', 'sluts',
-  'nigger', 'niggers', 'nigga',
-  'faggot', 'fag', 'dyke',
-  'retard', 'retarded',
-  'motherfucker', 'motherf', 'mofo',
+const EXACT_TERMS = [
+  // ── English profanity ────────────────────────────────────────────────────
+  'fuck', 'fuk', 'fck', 'f.u.c.k',
+  'shit', 'bullshit',
+  'bitch', 'btch',
+  'asshole', 'arsehole',
+  'bastard',
+  'cunt',
+  'dickhead', 'dickwad', 'dickweed',
+  'cocksucker',
+  'motherfucker', 'mofo',
   'son of a bitch', 'sonofabitch',
-  'damn', 'damnit',
-  'crap',
-  'idiot', 'moron', 'stupid',
   'kill yourself', 'kys',
   'go to hell', 'go fuck',
-  'loser', 'dumb', 'dumbass',
+  'dumbass', 'dumbfuck', 'dumbshit',
+  'shithead', 'shitface', 'shitbag', 'shitbrain',
+  'fuckwit', 'fuckhead', 'fuckface', 'fuckwad',
+  'jackass', 'assclown', 'assface', 'asswipe',
+  'scumbag',
+  'wanker', 'tosser', 'twat', 'prick',
 
   // ── Sexual / porn terms ──────────────────────────────────────────────────
   'porn', 'porno', 'pornography',
   'nude', 'nudes', 'nudity',
-  'naked', 'nakedpics',
-  'sex', 'sexy', 'sexting', 'sext',
+  'naked',
+  'sex', 'sexting', 'sext',
   'blowjob', 'blow job', 'handjob', 'hand job',
-  'penis', 'vagina', 'boobs', 'boob', 'booty',
+  'penis', 'vagina', 'boobs', 'boob',
   'anal', 'oral sex',
   'cum', 'cumshot',
-  'masturbat', 'masturbation',
+  'masturbat',
   'dildo', 'vibrator',
-  'erotic', 'erotica',
   'xxx', 'onlyfans',
-  'naughty', 'horny',
+  'horny',
 
-  // ── Romantic / relationship solicitation ────────────────────────────────
-  'i love you', 'i luv u', 'i luv you', 'ilove you',
-  'i hate you', 'i h8 you',
+  // ── Romantic / solicitation ──────────────────────────────────────────────
+  'send nudes', 'send pics', 'send photo',
+  'apna number do', 'number share', 'number do',
+  'personal number', 'whatsapp number', 'instagram id',
   'will you be my girlfriend', 'will you be my boyfriend',
   'be my gf', 'be my bf',
-  'i like you', 'i fancy you',
-  'you are beautiful', 'ur beautiful', 'u r beautiful',
-  'you are hot', 'ur hot', 'u r hot',
-  'you are sexy', 'ur sexy',
-  'send nudes', 'send pics', 'send photo',
-  'number doge', 'number do', 'apna number do', 'number share',
-  'personal number', 'whatsapp number', 'instagram id',
   'date me', 'date with me', 'lets meet',
 
-  // ── Hindi / Hinglish gaaliyan ────────────────────────────────────────────
-  'madarchod', 'maderchod', 'maadar chod', 'madarchhod', 'mc',
-  'behenchod', 'behen chod', 'bhenchod', 'bc',
-  'chutiya', 'chutiye', 'chut', 'chod',
-  'gaandu', 'gandu', 'gand', 'gaand',
-  'bhosdike', 'bhosdiwale', 'bhosdi', 'bsdk',
-  'randi', 'randwa', 'rande', 'randi ka baccha',
-  'harami', 'haramzada', 'haramzadi', 'haraamkhor',
-  'saala', 'saali', 'sala',
-  'lauda', 'lavda', 'lund', 'loda', 'lawde', 'lode', 'lawda',
+  // ── Hindi/Hinglish — multi-word phrases ──────────────────────────────────
   'tere maa ki', 'teri maa', 'teri ma',
-  'teri behen', 'teri behan',
-  'bakwaas', 'bakwas',
-  'kamina', 'kamine', 'kamini',
-  'kutte', 'kutta', 'kutti',
-  'suar', 'suwar',
-  'ullu', 'gadha', 'gadhe',
-  'jhatu', 'jhaat',
-  'bkl', 'mkl', 'mkc', 'bhen ke lode',
-  'lode', 'loda', 'lodu',
-  'chutad', 'gaand mara', 'maa chuda',
-  'bhag bsdk', 'bhag bc', 'nikal',
-  'teri maa ka', 'teri behen ka',
-  // ── Additional variations
-  'madar', 'madarchut', 'bhenke', 'bhnk',
-  'chu***', 'rand*', 'g**d',
-  'abe', 'oye', 'saale', 'kamine',
-  'bhosad', 'bhosd', 'bsdi',
-  'maa ki aankh', 'maa ki', 'maa ko',
-  'tatte', 'tattu',
-  'fuddi', 'phuddi',
-  'bhad mein jao', 'bhad me jao',
-  'chup kar', 'shut up',
-  'gali', 'gaali',
-
-  // ── New words found in posts ─────────────────────────────────────────────
-  'bokachoda', 'boka choda', 'bkc',
-  'sisterfucker', 'sister fucker',
-  'burchoodi', 'burchoddi', 'burchodi',
-  'bhadwaaaaa', 'bhadwa', 'bhadwe', 'bhadwee',
-  'betichood', 'betichodd', 'beti chood',
-  'randwee', 'randwe',
-  'machhar ki jhat', 'jhat',
-  'badmosh',
-  'nunu sad jaye',
-  'bhad',
-  'chutmarani', 'chutmaran',
-  'chodde', 'chode',
-  'maar de',
-  'teri gaand', 'gaand maar',
-
-  // ── Threat / harassment ──────────────────────────────────────────────────
-  'i will kill', 'i will hurt', 'i will find you',
-  'you will die', 'get lost', 'go die',
-  'harassment', 'threaten', 'stalk',
+  'teri behen', 'teri behan', 'teri bhen',
+  'teri gaand', 'gaand mara', 'gaand maar',
+  'gand mara', 'gand maar',
+  'maa chuda', 'maa ko', 'maa ki',
+  'bhen ke lode',
+  'randi ki aulaad', 'randi ki aulad',
+  'haram ki aulaad', 'haram ki aulad', 'haram ki paidaish',
+  'ullu ka pattha', 'ullu ki aulaad',
+  'kutte ka baccha', 'kutti ki aulaad',
+  'suar ka baccha', 'suar ki aulaad',
   'maar dunga', 'tod dunga',
+  'i will kill', 'i will hurt', 'i will find you',
+  'you will die', 'go die',
+  'machhar ki jhat',
+  'nunu sad jaye',
+  'bhad mein jao', 'bhad me jao',
+  'sharam se doob mar',
+  'hawas ka pujari',
 ];
 
 // ---------------------------------------------------------------------------
-// Build a single, fast regex (word-boundary aware, case-insensitive)
-// We normalise the input first (remove spaces inside words, leet → letters)
+// Stage 2: Stem terms — any word STARTING with these is blocked
+// This catches: chutiya, chutiye, chutiyapan, chutiyagiri, chutiyapanti etc.
+// ---------------------------------------------------------------------------
+const STEM_TERMS = [
+  // ── Core Hindi gaaliyan (stems) ──────────────────────────────────────────
+  'chutiy', 'chut',        // chutiya, chutiye, chutiyapan, chutiyagiri, chut
+  'madarchod', 'maderchod', 'madharchod', 'madar', 'madhar',
+  'behenchod', 'bhenchod', 'behnchod', 'bhen',
+  'gaandu', 'gandu', 'gaand', 'gand',
+  'bhosdik', 'bhosdic', 'bhosdiw', 'bhosdib', 'bhosdi', 'bhosad', 'bhosd',
+  'randi', 'randw', 'randv', 'rand',
+  'harami', 'haramz', 'haramkh', 'haram',
+  'lavd', 'laud', 'lod',
+  'lund',
+  'jhat',
+  'jhaat',
+  'tattu', 'tatt',
+  'fuddi', 'phuddi',
+  'bkl', 'bsdk', 'bkc', 'mkl', 'mkc',
+  'mc ', ' mc', '^mc$',   // standalone mc
+  ' bc', 'bc ', '^bc$',   // standalone bc
+  'bakchod',
+  'bakchoda',
+  'baklol',
+  'bhadw', 'bhadv',
+  'burchood', 'burchod',
+  'betichood', 'betichod',
+  'bokachod', 'boka chod',
+  'sisterfuck', 'sister fuck',
+  'chod',
+  'maa chud',
+  'kamina', 'kamine', 'kameena', 'kameene', 'kamini',
+  'kutte', 'kutta', 'kutti', 'kutiy',
+  'suar', 'suwar',
+  'gadha', 'gadhi', 'gadhe',
+  'ullu',
+  'jhatu',
+  'saala', 'saali', 'saale', 'sala',
+  'nalayak', 'naalayak',
+  'nikamma', 'nikammi', 'nikamme',
+  'ghatiya',
+  'gawar', 'gawaar', 'ganwar', 'ganvaar',
+  'jaahil', 'jahil',
+  'anpadh', 'anpad',
+  'besharam',
+  'tharki',
+  'lafanga', 'lafange', 'lafangi',
+  'awara', 'awaara',
+  'badmaash', 'badmash', 'badmosh',
+  'gunda', 'goonda', 'gunde', 'goonde',
+  'mawali', 'mawaali',
+  'tapori',
+  'chapri', 'chhapri',
+  'chomu',
+  'dhakkan',
+  'pagal', 'paagal',
+  'bewakoof', 'bewkuf', 'bevakoof',
+  'dhokebaaz', 'dhokhebaz', 'dagabaaz',
+  'namakharam',
+  'matlabi',
+  'kanjoos', 'kanjus',
+];
+
+// ---------------------------------------------------------------------------
+// Build regexes
 // ---------------------------------------------------------------------------
 
-// Sort by length desc so longer phrases match before their sub-strings
-const sorted = [...BLOCKED_TERMS].sort((a, b) => b.length - a.length);
-
-// Escape special regex chars in each term
 const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-// Build pattern — use \b where possible, but spaces inside phrases need
-// a looser match (allow any whitespace between words)
-const patternParts = sorted.map(term => {
-  const escaped = escape(term).replace(/ +/g, '[\\s_-]*');
-  // For single words, don't require word boundary at the end to catch variations
-  // This will match "bhosdi" in "bhosdi", "bhosdike", "bhosdiwaale", etc.
-  if (term.includes(' ')) {
-    return escaped;
-  } else {
-    // Start with word boundary, but end can have more characters
-    return `\\b${escaped}`;
-  }
-});
+// Exact terms regex — whole-word / phrase match
+const exactParts = [...EXACT_TERMS]
+  .sort((a, b) => b.length - a.length)
+  .map(term => {
+    const escaped = escape(term).replace(/ +/g, '[\\s_\\-]*');
+    return term.includes(' ') ? escaped : `\\b${escaped}`;
+  });
+const EXACT_REGEX = new RegExp(exactParts.join('|'), 'i');
 
-const BLOCK_REGEX = new RegExp(patternParts.join('|'), 'i');
+// Stem terms regex — word starts-with match (prefix)
+const stemParts = [...STEM_TERMS]
+  .sort((a, b) => b.length - a.length)
+  .map(term => {
+    // Handle standalone terms with ^ and $
+    if (term.startsWith('^') || term.includes('$')) return term;
+    const escaped = escape(term);
+    return `\\b${escaped}`;   // matches at start of word
+  });
+const STEM_REGEX = new RegExp(stemParts.join('|'), 'i');
 
 // ---------------------------------------------------------------------------
-// Normalise helper — collapses common leet-speak substitutions
+// Normalise helper — collapses leet-speak substitutions
 // ---------------------------------------------------------------------------
 function normalise(text) {
   return text
@@ -165,8 +183,8 @@ function normalise(text) {
     .replace(/@/g, 'a')
     .replace(/!/g, 'i')
     .replace(/\+/g, 't')
-    .replace(/\*/g, '') // asterisk used to mask letters — strip it
-    .replace(/\.+/g, '') // dots used to split letters — strip them
+    .replace(/\*/g, '')
+    .replace(/\.+/g, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -185,7 +203,7 @@ export function checkContent(message) {
 
   const normalised = normalise(message);
 
-  if (BLOCK_REGEX.test(normalised)) {
+  if (EXACT_REGEX.test(normalised) || STEM_REGEX.test(normalised)) {
     return {
       blocked: true,
       reason: 'Your message contains inappropriate content and was not sent.',
