@@ -28,6 +28,9 @@ import {
   createLecture,
   updateLecture,
   deleteLecture,
+  // Post Moderation
+  getAllPosts,
+  adminDeletePost,
 } from '../controllers/admin.controller.js';
 import { authenticate } from '../middleware/auth.middleware.js';
 
@@ -83,5 +86,9 @@ router.delete('/modules/:id', deleteModule);
 router.post('/lectures', createLecture);
 router.put('/lectures/:id', updateLecture);
 router.delete('/lectures/:id', deleteLecture);
+
+// Post moderation routes
+router.get('/posts', getAllPosts);
+router.delete('/posts/:id', adminDeletePost);
 
 export default router;

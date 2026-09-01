@@ -909,3 +909,63 @@ export const deleteLecture = async (req, res) => {
     res.status(500).json({ success: false, error: { message: err.message } });
   }
 };
+
+/**
+ * Get all community feed posts (with pagination + search)
+ * GET /api/admin/posts
+ */
+export const getAllPosts = async (req, res) => {
+  try {
+    const FeedPost = (await import('../models/FeedPost.js')).default;
+    const { page = 1, limit = 20, search = '' } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const filter = search
+      ? { content: { $regex: search, $options: 'i' } }
+      : {};
+
+    const [posts, total] = await Promise.all([
+      FeedPost.find(filter)
+        .populate('userId', 'name profileImage role')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parseInt(limit))
+        .lean(),
+      FeedPost.countDocuments(filter),
+    ]);
+
+    res.json({
+      success: true,
+      data: { posts, total, page: parseInt(page), totalPages: Math.ceil(total / parseInt(limit)) },
+    });
+  } catch (err) {
+    console.error('Admin getAllPosts error:', err);
+    res.status(500).json({ success: false, error: { message: err.message } });
+  }
+};
+
+/**
+ * Admin delete any post
+ * DELETE /api/admin/posts/:id
+ */
+export const adminDeletePost = async (req, res) => {
+  try {
+    const FeedPost = (await import('../models/FeedPost.js')).default;
+    const post = await FeedPost.findByIdAndDelete(req.params.id);
+
+    if (!post) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'Post not found' },
+      });
+    }
+
+    res.json({
+      success: true,
+      data: { message: 'Post deleted successfully' },
+    });
+  } catch (err) {
+    console.error('Admin deletePost error:', err);
+    res.status(500).json({ success: false, error: { message: err.message } });
+  }
+};
