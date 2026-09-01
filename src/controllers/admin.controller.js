@@ -135,11 +135,10 @@ export const preRegisterStudent = async (req, res) => {
       data: { preRegistered },
     });
   } catch (err) {
+    console.error('Pre-register error:', err.message, err.stack);
     res.status(500).json({ success: false, error: { message: err.message } });
   }
 };
-
-// Get all pre-registered students
 export const getPreRegisteredStudents = async (req, res) => {
   try {
     const { search, page = 1, limit = 500, status = 'all', schoolName } = req.query;
