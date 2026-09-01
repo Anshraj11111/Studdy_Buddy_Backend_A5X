@@ -295,8 +295,8 @@ export const markVideoCompleted = async (req, res) => {
     const { courseId, videoId } = req.params;
     
     const enrollment = await CourseEnrollment.findOne({
-      userId: req.user._id,
-      courseId,
+      userId: req.user._id.toString(),
+      courseId: courseId.toString(),
     });
     
     if (!enrollment) {

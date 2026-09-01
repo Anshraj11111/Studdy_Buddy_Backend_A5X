@@ -102,7 +102,7 @@ export const optionalAuth = async (req, res, next) => {
       const user = await User.findById(decoded.userId);
       
       if (user) {
-        req.user = user.toJSON(); // Apply toJSON transformation
+        req.user = user.toJSON(); // Apply toJSON transformation (includes hasFreeAccess)
       }
     } catch (err) {
       // Token invalid - continue without user (don't fail)

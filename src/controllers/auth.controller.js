@@ -337,6 +337,27 @@ export const resetPassword = async (req, res) => {
   }
 };
 
+/**
+ * Refresh JWT token - issues a new 30-day token
+ * POST /api/auth/refresh-token
+ * Requires: valid (non-expired) token in Authorization header
+ */
+const refreshToken = async (req, res) => {
+  try {
+    // req.user is set by authenticate middleware — token already verified
+    const newToken = authService.generateToken(req.user._id);
+    res.json({
+      success: true,
+      data: { token: newToken },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to refresh token' },
+    });
+  }
+};
+
 export default {
   register,
   login,
@@ -344,4 +365,5 @@ export default {
   updateProfile,
   forgotPassword,
   resetPassword,
+  refreshToken,
 };
