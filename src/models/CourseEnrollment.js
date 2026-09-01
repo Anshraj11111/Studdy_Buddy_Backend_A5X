@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { getConnection } from '../config/db-multi.js';
 
 const courseEnrollmentSchema = new mongoose.Schema({
   userId: {
@@ -47,6 +48,12 @@ const courseEnrollmentSchema = new mongoose.Schema({
 // Compound index to prevent duplicate enrollments
 courseEnrollmentSchema.index({ userId: 1, courseId: 1 }, { unique: true });
 
-const CourseEnrollment = mongoose.model('CourseEnrollment', courseEnrollmentSchema);
+let CourseEnrollment;
+try {
+  const conn = getConnection('secondary');
+  CourseEnrollment = conn.model('CourseEnrollment', courseEnrollmentSchema);
+} catch (error) {
+  CourseEnrollment = mongoose.model('CourseEnrollment', courseEnrollmentSchema);
+}
 
 export default CourseEnrollment;

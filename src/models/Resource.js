@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { getConnection } from '../config/db-multi.js';
 
 const resourceSchema = new mongoose.Schema(
   {
@@ -88,4 +89,12 @@ resourceSchema.index({ uploadedBy: 1 });
 resourceSchema.index({ tags: 1 });
 resourceSchema.index({ courseId: 1, moduleId: 1, order: 1 }); // NEW: For course structure
 
-export default mongoose.model('Resource', resourceSchema);
+let Resource;
+try {
+  const conn = getConnection('secondary');
+  Resource = conn.model('Resource', resourceSchema);
+} catch (error) {
+  Resource = mongoose.model('Resource', resourceSchema);
+}
+
+export default Resource;

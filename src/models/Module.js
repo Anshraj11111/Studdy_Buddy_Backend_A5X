@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { getConnection } from '../config/db-multi.js';
 
 const moduleSchema = new mongoose.Schema({
   courseId: {
@@ -47,6 +48,12 @@ const moduleSchema = new mongoose.Schema({
 // Index for fast queries
 moduleSchema.index({ courseId: 1, order: 1 });
 
-const Module = mongoose.model('Module', moduleSchema);
+let Module;
+try {
+  const conn = getConnection('secondary');
+  Module = conn.model('Module', moduleSchema);
+} catch (error) {
+  Module = mongoose.model('Module', moduleSchema);
+}
 
 export default Module;

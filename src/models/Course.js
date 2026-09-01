@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { getConnection } from '../config/db-multi.js';
 
 const courseSchema = new mongoose.Schema({
   title: {
@@ -98,6 +99,12 @@ courseSchema.virtual('isNew').get(function() {
 courseSchema.set('toJSON', { virtuals: true });
 courseSchema.set('toObject', { virtuals: true });
 
-const Course = mongoose.model('Course', courseSchema);
+let Course;
+try {
+  const conn = getConnection('secondary');
+  Course = conn.model('Course', courseSchema);
+} catch (error) {
+  Course = mongoose.model('Course', courseSchema);
+}
 
 export default Course;

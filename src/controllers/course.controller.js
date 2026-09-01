@@ -110,13 +110,8 @@ export const getCourseById = async (req, res) => {
  */
 export const getModuleLectures = async (req, res) => {
   try {
-    const module = await Module.findById(req.params.id)
-      .populate({
-        path: 'resources',
-        options: { sort: { order: 1 } },
-        populate: { path: 'uploadedBy', select: 'name profileImage' },
-      })
-      .lean();
+    // Fetch module WITHOUT populate - use manual fetch to avoid cross-connection issues
+    const module = await Module.findById(req.params.id).lean();
     
     if (!module) {
       return res.status(404).json({
@@ -125,7 +120,13 @@ export const getModuleLectures = async (req, res) => {
       });
     }
     
-    // Check if user has completed each video
+    // Manually fetch resources using Resource model (same secondary DB connection)
+    const resources = await Resource.find({ moduleId: req.params.id })
+      .populate('uploadedBy', 'name profileImage')
+      .sort({ order: 1 })
+      .lean();
+    
+    // Check completion status if user is authenticated
     if (req.user) {
       const enrollment = await CourseEnrollment.findOne({
         userId: req.user._id,
@@ -136,12 +137,13 @@ export const getModuleLectures = async (req, res) => {
         const completedSet = new Set(
           enrollment.completedVideos.map(v => v.toString())
         );
-        
-        module.resources.forEach(resource => {
+        resources.forEach(resource => {
           resource.completed = completedSet.has(resource._id.toString());
         });
       }
     }
+    
+    module.resources = resources;
     
     res.json({
       success: true,
@@ -152,6 +154,74 @@ export const getModuleLectures = async (req, res) => {
     res.status(500).json({
       success: false,
       error: { message: 'Failed to fetch lectures' },
+    });
+  }
+};
+
+/**
+ * Get secure video URL (with token validation)
+ * GET /api/courses/lectures/:lectureId/video-url
+ */
+export const getSecureVideoUrl = async (req, res) => {
+  try {
+    const { lectureId } = req.params;
+    
+    // Find the resource
+    const resource = await Resource.findById(lectureId).lean();
+    
+    if (!resource) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'Lecture not found' },
+      });
+    }
+    
+    // Find the module to get courseId
+    const module = await Module.findOne({ resources: lectureId }).lean();
+    
+    if (!module) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'Module not found' },
+      });
+    }
+    
+    // Check if user is enrolled in the course
+    const enrollment = await CourseEnrollment.findOne({
+      userId: req.user._id,
+      courseId: module.courseId,
+    }).lean();
+    
+    if (!enrollment && !req.user.hasPremiumAccess && !req.user.hasFreeAccess) {
+      return res.status(403).json({
+        success: false,
+        error: { message: 'Please enroll in the course to access this content' },
+      });
+    }
+    
+    // Return the video URL (this will only be sent to authorized users)
+    const videoUrl = resource.fileUrl || resource.url;
+    
+    if (!videoUrl) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'Video URL not found in resource' },
+      });
+    }
+    
+    res.json({
+      success: true,
+      data: {
+        url: videoUrl,
+        title: resource.title,
+        type: resource.type || resource.fileType,
+      },
+    });
+  } catch (error) {
+    console.error('Get secure video URL error:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to get video URL' },
     });
   }
 };
@@ -308,6 +378,7 @@ export default {
   getAllCourses,
   getCourseById,
   getModuleLectures,
+  getSecureVideoUrl,
   enrollInCourse,
   markVideoCompleted,
   getMyCourses,

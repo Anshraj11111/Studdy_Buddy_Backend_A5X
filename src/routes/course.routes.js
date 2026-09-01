@@ -4,6 +4,7 @@ import {
   getAllCourses,
   getCourseById,
   getModuleLectures,
+  getSecureVideoUrl,
   enrollInCourse,
   markVideoCompleted,
   getMyCourses,
@@ -17,6 +18,7 @@ router.get('/:id', optionalAuth, getCourseById);
 router.get('/modules/:id/lectures', optionalAuth, getModuleLectures);
 
 // Protected routes
+router.get('/lectures/:lectureId/video-url', authenticate, getSecureVideoUrl);
 router.post('/:id/enroll', authenticate, enrollInCourse);
 router.post('/:courseId/videos/:videoId/complete', authenticate, markVideoCompleted);
 router.get('/my/enrolled', authenticate, getMyCourses);
