@@ -1,5 +1,6 @@
 import express from 'express';
 import User from '../models/User.js';
+import Notification from '../models/Notification.js';
 import authMiddleware from '../middleware/auth.middleware.js';
 
 const router = express.Router();
@@ -41,6 +42,20 @@ router.post('/:userId', authenticate, async (req, res) => {
     if (exists) return res.json({ success: true, data: { message: 'Already following' } });
 
     await Follow.create({ follower: req.user._id, following: userId });
+
+    // Create notification + emit socket event to followed user
+    try {
+      const notif = await Notification.create({
+        recipient: userId,
+        sender: req.user._id,
+        type: 'follow',
+        message: `${req.user.name} started following you`,
+      });
+      const populated = await Notification.findById(notif._id).populate('sender', 'name profileImage');
+      const io = req.app.get('io');
+      if (io) io.to(`user:${userId}`).emit('notification', populated);
+    } catch { /* Notification error shouldn't fail the follow */ }
+
     res.status(201).json({ success: true, data: { message: 'Followed successfully' } });
   } catch (err) {
     res.status(500).json({ success: false, error: { message: 'Failed to follow' } });

@@ -1,6 +1,7 @@
 import express from 'express';
 import Connection from '../models/Connection.js';
 import User from '../models/User.js';
+import Notification from '../models/Notification.js';
 import authMiddleware from '../middleware/auth.middleware.js';
 
 const router = express.Router();
@@ -77,21 +78,26 @@ router.post('/request/:userId', authenticate, async (req, res) => {
 
     const conn = await Connection.create({ requester: req.user._id, recipient: userId });
 
-    // Notify recipient via socket in real-time
-    const io = req.app.get('io');
-    if (io) {
-      io.to(`user:${userId}`).emit('connectionRequest', {
+    // Save notification to DB + emit socket 'notification' event (so frontend bell updates)
+    try {
+      const notif = await Notification.create({
+        recipient: userId,
+        sender: req.user._id,
         type: 'connection_request',
-        from: {
-          _id: req.user._id,
-          name: req.user.name,
-          profileImage: req.user.profileImage,
-          role: req.user.role,
-        },
-        connectionId: conn._id,
         message: `${req.user.name} sent you a connection request`,
       });
-    }
+      const populated = await Notification.findById(notif._id).populate('sender', 'name profileImage');
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`user:${userId}`).emit('notification', populated);
+        // Also emit old event for Communities.jsx pending tab refresh
+        io.to(`user:${userId}`).emit('connectionRequest', {
+          type: 'connection_request',
+          from: { _id: req.user._id, name: req.user.name, profileImage: req.user.profileImage, role: req.user.role },
+          connectionId: conn._id,
+        });
+      }
+    } catch { /* notification error shouldn't fail the connection */ }
 
     res.status(201).json({ success: true, data: { connection: conn } });
   } catch (err) {
@@ -109,6 +115,20 @@ router.put('/:id/accept', authenticate, async (req, res) => {
     }
     conn.status = 'accepted';
     await conn.save();
+
+    // Notify the requester that their request was accepted
+    try {
+      const notif = await Notification.create({
+        recipient: conn.requester,
+        sender: req.user._id,
+        type: 'connection',
+        message: `${req.user.name} accepted your connection request`,
+      });
+      const populated = await Notification.findById(notif._id).populate('sender', 'name profileImage');
+      const io = req.app.get('io');
+      if (io) io.to(`user:${String(conn.requester)}`).emit('notification', populated);
+    } catch { /* ignore */ }
+
     res.json({ success: true, data: { connection: conn } });
   } catch (err) {
     res.status(500).json({ success: false, error: { message: 'Failed to accept' } });
