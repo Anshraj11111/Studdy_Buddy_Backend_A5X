@@ -107,18 +107,28 @@ export const connectAllDatabases = async () => {
     // Primary is already connected via mongoose.connect() in server.js
     connections.primary = mongoose.connection;
 
-    // Connect secondary and tertiary in parallel
-    await Promise.all([
-      connectDatabase('secondary', process.env.MONGO_URI_SECONDARY),
-      connectDatabase('tertiary', process.env.MONGO_URI_TERTIARY),
-    ]);
+    // Connect secondary and tertiary individually - don't crash if one fails
+    try {
+      await connectDatabase('secondary', process.env.MONGO_URI_SECONDARY);
+    } catch (err) {
+      console.warn('⚠️ Secondary DB failed, using primary as fallback:', err.message);
+      connections.secondary = mongoose.connection;
+    }
 
-    console.log('✅ All 3 databases connected successfully!');
+    try {
+      await connectDatabase('tertiary', process.env.MONGO_URI_TERTIARY);
+    } catch (err) {
+      console.warn('⚠️ Tertiary DB failed, using primary as fallback:', err.message);
+      connections.tertiary = mongoose.connection;
+    }
+
+    console.log('✅ All databases connected (with fallbacks if needed)!');
     console.log('📊 Total capacity: 10,000+ concurrent users');
 
   } catch (error) {
     console.error('✗ Multi-database connection failed:', error.message);
-    process.exit(1);
+    // Don't exit - use what we have
+    console.warn('⚠️ Starting with available connections...');
   }
 };
 
