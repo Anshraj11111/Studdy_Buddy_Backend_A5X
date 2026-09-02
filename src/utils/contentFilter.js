@@ -91,7 +91,7 @@ const STEM_TERMS = [
   'bhosdik', 'bhosdic', 'bhosdiw', 'bhosdib', 'bhosdi', 'bhosad', 'bhosd',
   'randi', 'randw', 'randv', 'rand',
   'harami', 'haramz', 'haramkh', 'haram',
-  'lavd', 'laud', 'lod',
+  'lavd', 'laud', 'lod', 'lawd', 'lawad',
   'lund',
   'jhat',
   'jhaat',
