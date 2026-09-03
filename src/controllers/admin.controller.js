@@ -840,6 +840,21 @@ export const createLecture = async (req, res) => {
 };
 
 /**
+/**
+ * Get single lecture with fileUrl (admin only)
+ * GET /api/admin/lectures/:id
+ */
+export const getLecture = async (req, res) => {
+  try {
+    const lecture = await Resource.findById(req.params.id).lean();
+    if (!lecture) return res.status(404).json({ success: false, error: { message: 'Lecture not found' } });
+    res.json({ success: true, data: { lecture } });
+  } catch (err) {
+    res.status(500).json({ success: false, error: { message: err.message } });
+  }
+};
+
+/**
  * Update lecture
  * PUT /api/admin/lectures/:id
  */

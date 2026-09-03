@@ -26,6 +26,7 @@ import {
   deleteModule,
   // Lecture Management
   createLecture,
+  getLecture,
   updateLecture,
   deleteLecture,
   // Post Moderation
@@ -84,6 +85,7 @@ router.delete('/modules/:id', deleteModule);
 
 // Lecture management routes
 router.post('/lectures', createLecture);
+router.get('/lectures/:id', getLecture);
 router.put('/lectures/:id', updateLecture);
 router.delete('/lectures/:id', deleteLecture);
 
