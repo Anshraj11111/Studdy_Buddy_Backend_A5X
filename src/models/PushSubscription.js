@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { getConnection } from '../config/db-multi.js';
 
 const pushSubscriptionSchema = new mongoose.Schema({
   user: {
@@ -6,7 +7,6 @@ const pushSubscriptionSchema = new mongoose.Schema({
     ref: 'User',
     required: true,
   },
-  // The full PushSubscription object from browser
   endpoint: {
     type: String,
     required: true,
@@ -15,13 +15,11 @@ const pushSubscriptionSchema = new mongoose.Schema({
     p256dh: { type: String, required: true },
     auth: { type: String, required: true },
   },
-  // Track device/browser for multi-device support
   userAgent: { type: String, default: '' },
 }, { timestamps: true });
 
-// One user can have multiple subscriptions (multiple devices/browsers)
 pushSubscriptionSchema.index({ user: 1 });
-// Unique per endpoint so we don't double-store same browser
 pushSubscriptionSchema.index({ endpoint: 1 }, { unique: true });
 
+// Use PRIMARY DB — same default connection all other models use
 export default mongoose.model('PushSubscription', pushSubscriptionSchema);

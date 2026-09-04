@@ -17,6 +17,7 @@ webpush.setVapidDetails(
 export async function sendPushToUser(userId, payload) {
   try {
     const subscriptions = await PushSubscription.find({ user: userId });
+    logger.info(`[WebPush] Sending push to user ${userId} — ${subscriptions.length} subscription(s) found`);
     if (!subscriptions.length) return;
 
     const data = JSON.stringify({
@@ -38,6 +39,8 @@ export async function sendPushToUser(userId, payload) {
       )
     );
 
+    logger.info(`[WebPush] Push sent to ${userId} — ${results.filter(r => r.status === 'fulfilled').length} success, ${results.filter(r => r.status === 'rejected').length} failed`);
+
     // Remove stale subscriptions (410 Gone = unsubscribed, 404 = invalid)
     const staleEndpoints = [];
     results.forEach((result, index) => {
@@ -48,6 +51,7 @@ export async function sendPushToUser(userId, payload) {
         } else {
           logger.warn('[WebPush] Failed to send push', {
             userId,
+            statusCode: status,
             error: result.reason?.message,
           });
         }

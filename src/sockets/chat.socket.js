@@ -2,6 +2,7 @@ import MessageService from '../services/message.service.js';
 import RoomService from '../services/room.service.js';
 import logger from '../utils/logger.js';
 import { checkContent } from '../utils/contentFilter.js';
+import { sendPushToUser } from '../services/webPush.service.js';
 
 const MAX_MESSAGE_LENGTH = 5000;
 const MESSAGE_QUEUE_SIZE = 1000;
@@ -209,7 +210,6 @@ export const setupChatSocket = (io) => {
             });
 
             // Push to device even if app/browser is closed (WhatsApp-style)
-            const { sendPushToUser } = await import('../services/webPush.service.js');
             sendPushToUser(recipientId, {
               title: populatedNotif.sender?.name || 'New Message',
               body: content.trim().substring(0, 100),
