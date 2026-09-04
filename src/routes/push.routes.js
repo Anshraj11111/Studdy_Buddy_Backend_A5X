@@ -28,7 +28,7 @@ router.post('/subscribe', authenticate, async (req, res) => {
     await PushSubscription.findOneAndUpdate(
       { endpoint },
       { user: req.user._id, endpoint, keys, userAgent },
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: 'after' }
     );
 
     res.status(201).json({ success: true, data: { message: 'Subscribed to push notifications' } });
