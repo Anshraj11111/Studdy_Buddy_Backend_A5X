@@ -214,7 +214,7 @@ export const setupChatSocket = (io) => {
               title: populatedNotif.sender?.name || 'New Message',
               body: content.trim().substring(0, 100),
               icon: populatedNotif.sender?.profileImage || '/icons/icon-192x192.png',
-              url: '/chat',
+              url: `/chat/${roomId}`,
               type: 'message',
             });
           }
