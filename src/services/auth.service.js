@@ -5,6 +5,13 @@ import SchoolChannel from '../models/SchoolChannel.js';
 import PreRegisteredStudent from '../models/PreRegisteredStudent.js';
 import { sendPasswordResetEmail, sendPasswordChangedEmail } from '../config/email.js';
 
+// Generate a unique referral code like "ANSH4X2B"
+function generateReferralCode(name) {
+  const prefix = (name || 'USER').replace(/\s+/g, '').toUpperCase().slice(0, 4);
+  const suffix = Math.random().toString(36).toUpperCase().slice(2, 6);
+  return `${prefix}${suffix}`;
+}
+
 class AuthService {
   /**
    * Register a new user
@@ -70,6 +77,7 @@ class AuthService {
         schoolName: schoolName || '',
         schoolPassword: schoolPassword || '',
         city: city || '',
+        referralCode: generateReferralCode(name),
       });
 
       // Auto-join school channel for students (only if channel exists AND school info provided)

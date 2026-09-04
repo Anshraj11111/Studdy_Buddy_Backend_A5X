@@ -207,6 +207,16 @@ export const setupChatSocket = (io) => {
               createdAt: populatedNotif.createdAt,
               read: false,
             });
+
+            // Push to device even if app/browser is closed (WhatsApp-style)
+            const { sendPushToUser } = await import('../services/webPush.service.js');
+            sendPushToUser(recipientId, {
+              title: populatedNotif.sender?.name || 'New Message',
+              body: content.trim().substring(0, 100),
+              icon: populatedNotif.sender?.profileImage || '/icons/icon-192x192.png',
+              url: '/chat',
+              type: 'message',
+            });
           }
         } catch (notifErr) {
           // Notification failure should not affect message delivery

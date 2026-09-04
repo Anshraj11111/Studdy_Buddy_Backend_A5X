@@ -62,6 +62,24 @@ const paymentSchema = new mongoose.Schema(
       ref: 'User',
       default: null,
     },
+    // Referral fields
+    referralCode: {
+      type: String,
+      default: null,        // code used at purchase time
+    },
+    referrerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,        // user who owns the referral code
+    },
+    referralDiscount: {
+      type: Number,
+      default: 0,           // discount amount in ₹ applied
+    },
+    referralXpGranted: {
+      type: Boolean,
+      default: false,       // whether XP was already credited to referrer
+    },
   },
   {
     timestamps: true,

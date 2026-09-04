@@ -352,6 +352,34 @@ export const approvePayment = async (req, res) => {
     
     await user.save();
 
+    // ── Credit XP to referrer (only once per payment) ─────────────────────
+    const REFERRER_XP_REWARD = 50;
+    if (payment.referrerId && !payment.referralXpGranted) {
+      try {
+        const referrer = await User.findById(payment.referrerId);
+        if (referrer) {
+          referrer.xp = (referrer.xp || 0) + REFERRER_XP_REWARD;
+          referrer.referralsMade = (referrer.referralsMade || 0) + 1;
+          referrer.xpHistory = referrer.xpHistory || [];
+          referrer.xpHistory.push({
+            action: 'referral_reward',
+            amount: REFERRER_XP_REWARD,
+            createdAt: new Date(),
+          });
+          await referrer.save();
+
+          // Mark XP as granted so we don't double-credit
+          payment.referralXpGranted = true;
+          await payment.save();
+
+          console.log(`✅ Referral XP +${REFERRER_XP_REWARD} credited to ${referrer.name} (${referrer._id})`);
+        }
+      } catch (xpErr) {
+        // Non-fatal: log but don't fail the approval
+        console.error('Failed to credit referral XP:', xpErr.message);
+      }
+    }
+
     res.json({
       success: true,
       data: { payment },

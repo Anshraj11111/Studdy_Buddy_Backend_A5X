@@ -3,6 +3,7 @@ import Connection from '../models/Connection.js';
 import User from '../models/User.js';
 import Notification from '../models/Notification.js';
 import authMiddleware from '../middleware/auth.middleware.js';
+import { sendPushToUser } from '../services/webPush.service.js';
 
 const router = express.Router();
 const { authenticate } = authMiddleware;
@@ -97,6 +98,14 @@ router.post('/request/:userId', authenticate, async (req, res) => {
           connectionId: conn._id,
         });
       }
+      // Push to device even if app/browser is closed
+      sendPushToUser(userId, {
+        title: 'New Connection Request',
+        body: `${req.user.name} sent you a connection request`,
+        icon: req.user.profileImage || '/icons/icon-192x192.png',
+        url: '/community',
+        type: 'connection_request',
+      });
     } catch { /* notification error shouldn't fail the connection */ }
 
     res.status(201).json({ success: true, data: { connection: conn } });
@@ -127,6 +136,14 @@ router.put('/:id/accept', authenticate, async (req, res) => {
       const populated = await Notification.findById(notif._id).populate('sender', 'name profileImage');
       const io = req.app.get('io');
       if (io) io.to(`user:${String(conn.requester)}`).emit('notification', populated);
+      // Push to device even if app/browser is closed
+      sendPushToUser(String(conn.requester), {
+        title: 'Connection Accepted',
+        body: `${req.user.name} accepted your connection request`,
+        icon: req.user.profileImage || '/icons/icon-192x192.png',
+        url: '/community',
+        type: 'connection',
+      });
     } catch { /* ignore */ }
 
     res.json({ success: true, data: { connection: conn } });

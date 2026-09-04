@@ -153,6 +153,18 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    // Referral system
+    referralCode: {
+      type: String,
+      unique: true,
+      sparse: true,   // allows null without unique conflict
+      default: null,
+    },
+    referralsMade: {
+      type: Number,
+      default: 0,     // count of successful referrals (paid + approved)
+    },
+
     // Password reset fields
     passwordResetCode: {
       type: String,
@@ -185,6 +197,7 @@ userSchema.methods.toJSON = function () {
   delete user.schoolPassword;
   delete user.phone;
   delete user.privateAddress;
+  // referralCode is always returned (needed for sharing)
   return user;
 };
 
@@ -195,6 +208,7 @@ userSchema.methods.toOwnerJSON = function () {
   // Add hasFreeAccess flag: true if has school credentials OR isPremium
   user.hasFreeAccess = !!(this.schoolName && this.schoolPassword) || this.isPremium;
   delete user.schoolPassword;
+  // referralCode is always returned for owner
   return user;
 };
 
@@ -206,6 +220,7 @@ userSchema.index({ 'skills': 1 });                 // Search by skills
 userSchema.index({ createdAt: -1 });               // Recent users
 userSchema.index({ isActive: 1, role: 1 });        // Active users by role
 userSchema.index({ mentorCode: 1 }, { sparse: true }); // Mentor lookup
+userSchema.index({ referralCode: 1 }, { sparse: true }); // Referral lookup
 userSchema.index({ schoolName: 1, city: 1 });      // School-based filtering
 
 // Lazy model creation - wait for connection to be ready

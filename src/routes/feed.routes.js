@@ -4,6 +4,7 @@ import Notification from '../models/Notification.js';
 import authMiddleware from '../middleware/auth.middleware.js';
 import { addXP } from '../services/xp.service.js';
 import { checkContent } from '../utils/contentFilter.js';
+import { sendPushToUser } from '../services/webPush.service.js';
 
 const router = express.Router();
 const { authenticate } = authMiddleware;
@@ -134,6 +135,14 @@ router.post('/:id/like', authenticate, async (req, res) => {
         const populated = await Notification.findById(notif._id).populate('sender', 'name profileImage');
         const io = req.app.get('io');
         emitNotification(io, String(post.userId), populated);
+        // Push to device even if app/browser is closed
+        sendPushToUser(String(post.userId), {
+          title: 'Studdy Buddy',
+          body: `${req.user.name} liked your post`,
+          icon: req.user.profileImage || '/icons/icon-192x192.png',
+          url: '/feed',
+          type: 'like',
+        });
       }
     }
     await post.save();
@@ -188,6 +197,14 @@ router.post('/:id/comment', authenticate, async (req, res) => {
       const populated = await Notification.findById(notif._id).populate('sender', 'name profileImage');
       const io = req.app.get('io');
       emitNotification(io, String(post.userId), populated);
+      // Push to device even if app/browser is closed
+      sendPushToUser(String(post.userId), {
+        title: 'Studdy Buddy',
+        body: `${req.user.name} commented on your post`,
+        icon: req.user.profileImage || '/icons/icon-192x192.png',
+        url: '/feed',
+        type: 'comment',
+      });
     }
 
     const populatedPost = await FeedPost.findById(post._id)

@@ -23,6 +23,8 @@ import playlistRoutes from './routes/playlist.routes.js';
 import schoolChannelRoutes from './routes/schoolChannel.routes.js';
 import paymentRoutes from './routes/payment.routes.js';
 import courseRoutes from './routes/course.routes.js';
+import referralRoutes from './routes/referral.routes.js';
+import pushRoutes from './routes/push.routes.js';
 import { errorHandler } from './middleware/error.middleware.js';
 import { requestLogger } from './middleware/request-logger.middleware.js';
 import { sanitizeMongoOperators } from './middleware/input-sanitization.middleware.js';
@@ -400,6 +402,8 @@ app.use('/api/playlists', playlistRoutes);
 app.use('/api/school-channel', schoolChannelRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/courses', courseRoutes);
+app.use('/api/referral', referralRoutes);
+app.use('/api/push', pushRoutes);
 
 // 404 handler
 app.use((req, res) => {

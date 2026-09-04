@@ -2,6 +2,7 @@ import express from 'express';
 import User from '../models/User.js';
 import Notification from '../models/Notification.js';
 import authMiddleware from '../middleware/auth.middleware.js';
+import { sendPushToUser } from '../services/webPush.service.js';
 
 const router = express.Router();
 const { authenticate } = authMiddleware;
@@ -54,6 +55,14 @@ router.post('/:userId', authenticate, async (req, res) => {
       const populated = await Notification.findById(notif._id).populate('sender', 'name profileImage');
       const io = req.app.get('io');
       if (io) io.to(`user:${userId}`).emit('notification', populated);
+      // Push to device even if app/browser is closed
+      sendPushToUser(userId, {
+        title: 'Studdy Buddy',
+        body: `${req.user.name} started following you`,
+        icon: req.user.profileImage || '/icons/icon-192x192.png',
+        url: '/profile',
+        type: 'follow',
+      });
     } catch { /* Notification error shouldn't fail the follow */ }
 
     res.status(201).json({ success: true, data: { message: 'Followed successfully' } });

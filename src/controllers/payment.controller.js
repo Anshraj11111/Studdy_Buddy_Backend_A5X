@@ -1,6 +1,7 @@
 import Payment from '../models/Payment.js';
 import User from '../models/User.js';
 import AppSettings from '../models/AppSettings.js';
+import { REFERRAL_DISCOUNT_PERCENT, REFERRAL_MAX_DISCOUNT } from '../routes/referral.routes.js';
 
 /**
  * Submit payment for verification
@@ -8,14 +9,41 @@ import AppSettings from '../models/AppSettings.js';
  */
 export const submitPayment = async (req, res) => {
   try {
-    const { amount, courseName, courseId, transactionId, upiId } = req.body;
+    const { amount: rawAmount, courseName, courseId, transactionId, upiId, referralCode } = req.body;
     const userId = req.user._id;
 
-    if (!amount || !courseName) {
+    if (!rawAmount || !courseName) {
       return res.status(400).json({
         success: false,
         error: { message: 'Amount and course name are required', code: 'VALIDATION_ERROR' },
       });
+    }
+
+    let finalAmount = Number(rawAmount);
+    let referrerId = null;
+    let referralDiscount = 0;
+    let usedCode = null;
+
+    // ── Apply referral discount if code provided ───────────────────────────
+    if (referralCode && referralCode.trim()) {
+      const code = referralCode.trim().toUpperCase();
+
+      // Find referrer
+      const referrer = await User.findOne({ referralCode: code }).select('_id name');
+      if (referrer && String(referrer._id) !== String(userId)) {
+        // Valid, non-self referral
+        referrerId = referrer._id;
+        usedCode = code;
+
+        // Get base price from settings for discount calculation
+        let basePrice = finalAmount;
+        const discount = Math.min(
+          Math.round((basePrice * REFERRAL_DISCOUNT_PERCENT) / 100),
+          REFERRAL_MAX_DISCOUNT
+        );
+        referralDiscount = discount;
+        finalAmount = Math.max(1, finalAmount - discount); // never go below ₹1
+      }
     }
 
     // Create payment record
@@ -23,17 +51,20 @@ export const submitPayment = async (req, res) => {
       userId,
       userName: req.user.name,
       userEmail: req.user.email,
-      amount,
+      amount: finalAmount,
       courseName,
       courseId: courseId || 'all-resources',
       transactionId: transactionId || '',
       upiId: upiId || '',
       status: 'pending',
+      referralCode: usedCode,
+      referrerId,
+      referralDiscount,
     });
 
     res.status(201).json({
       success: true,
-      data: { payment },
+      data: { payment, referralApplied: !!referrerId, referralDiscount },
       message: 'Payment submitted for verification. Admin will review shortly.',
     });
   } catch (error) {
