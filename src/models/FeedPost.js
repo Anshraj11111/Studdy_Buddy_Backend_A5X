@@ -11,7 +11,7 @@ const feedPostSchema = new mongoose.Schema(
     content: {
       type: String,
       required: true,
-      maxlength: 3000,
+      maxlength: 7000,
     },
     category: {
       type: String,
