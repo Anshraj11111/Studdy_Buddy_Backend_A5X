@@ -5,6 +5,7 @@ import authMiddleware from '../middleware/auth.middleware.js';
 import { addXP } from '../services/xp.service.js';
 import { checkContent } from '../utils/contentFilter.js';
 import { sendPushToUser } from '../services/webPush.service.js';
+import { getCache, setCache, deleteCache } from '../config/redis.js';
 
 const router = express.Router();
 const { authenticate } = authMiddleware;
@@ -22,6 +23,11 @@ router.get('/', authenticate, async (req, res) => {
     const { category, page = 1, limit = 20, search = '' } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
+    // Cache key — TTL 2 min (feed changes frequently)
+    const cacheKey = `feed:${category || 'All'}:${page}:${limit}:${search.trim()}`;
+    const cached = await getCache(cacheKey);
+    if (cached) return res.json(cached);
+
     const query = {};
     if (category && category !== 'All') query.category = category;
     if (search.trim()) {
@@ -37,13 +43,20 @@ router.get('/', authenticate, async (req, res) => {
 
     const total = await FeedPost.countDocuments(query);
 
-    res.json({
+    const response = {
       success: true,
       data: {
         posts,
         pagination: { page: parseInt(page), limit: parseInt(limit), total },
       },
-    });
+    };
+
+    // Only cache non-search requests (search results less likely to be reused)
+    if (!search.trim()) {
+      await setCache(cacheKey, response, 120); // 2 min TTL
+    }
+
+    res.json(response);
   } catch (err) {
     res.status(500).json({ success: false, error: { message: 'Failed to fetch feed' } });
   }
@@ -84,6 +97,9 @@ router.post('/', authenticate, async (req, res) => {
 
     // Award XP for creating a feed post
     addXP(req.user._id, 'post');
+
+    // Invalidate feed cache so new post shows immediately
+    deleteCache('feed:*').catch(() => {});
 
     res.status(201).json({ success: true, data: { post: populated } });
   } catch (err) {

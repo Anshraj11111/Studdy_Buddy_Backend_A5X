@@ -1,5 +1,6 @@
 import communityService from '../services/community.service.js';
 import { checkContent } from '../utils/contentFilter.js';
+import { getCache, setCache, deleteCache } from '../config/redis.js';
 
 /**
  * Create a new community
@@ -26,11 +27,12 @@ export const createCommunity = async (req, res) => {
       createdBy: req.user._id,
     });
 
+    // Invalidate communities cache
+    deleteCache('communities:*').catch(() => {});
+
     res.status(201).json({
       success: true,
-      data: {
-        community,
-      },
+      data: { community },
     });
   } catch (error) {
     res.status(400).json({
@@ -57,25 +59,27 @@ export const getCommunities = async (req, res) => {
     const filters = {};
     if (topic) filters.topic = topic;
 
-    const communities = await communityService.getCommunities(filters, {
-      page: pageNum,
-      limit: limitNum,
-    });
+    // Cache key — TTL 5 min (communities don't change often)
+    const cacheKey = `communities:${JSON.stringify({ pageNum, limitNum, ...filters })}`;
+    const cached = await getCache(cacheKey);
+    if (cached) {
+      return res.status(200).json(cached);
+    }
 
+    const communities = await communityService.getCommunities(filters, { page: pageNum, limit: limitNum });
     const total = await communityService.getCommunityCount(filters);
 
-    res.status(200).json({
+    const response = {
       success: true,
       data: {
         communities,
-        pagination: {
-          page: pageNum,
-          limit: limitNum,
-          total,
-          pages: Math.ceil(total / limitNum),
-        },
+        pagination: { page: pageNum, limit: limitNum, total, pages: Math.ceil(total / limitNum) },
       },
-    });
+    };
+
+    await setCache(cacheKey, response, 300); // 5 min TTL
+
+    res.status(200).json(response);
   } catch (error) {
     res.status(500).json({
       success: false,

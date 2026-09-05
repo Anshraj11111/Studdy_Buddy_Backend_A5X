@@ -129,13 +129,26 @@ export const getCache = async (key) => {
 };
 
 /**
- * Delete cached data
- * @param {string} key - Cache key
+ * Delete cached data — supports exact key or prefix pattern ending with *
+ * e.g. deleteCache('feed:*') deletes all keys starting with 'feed:'
  */
 export const deleteCache = async (key) => {
   if (!redisClient) return false;
   try {
-    await redisClient.del(key);
+    if (key.endsWith('*')) {
+      // Pattern delete — scan and delete all matching keys
+      const prefix = key.slice(0, -1);
+      let cursor = 0;
+      do {
+        const result = await redisClient.scan(cursor, { MATCH: key, COUNT: 100 });
+        cursor = result.cursor;
+        if (result.keys.length) {
+          await redisClient.del(result.keys);
+        }
+      } while (cursor !== 0);
+    } else {
+      await redisClient.del(key);
+    }
     return true;
   } catch (err) {
     console.warn('⚠️ Cache delete failed:', err.message);

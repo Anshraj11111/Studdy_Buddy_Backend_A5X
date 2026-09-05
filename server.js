@@ -3,6 +3,7 @@ import { execSync } from 'child_process';
 import dotenv from 'dotenv';
 import { Server } from 'socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
+import { createClient } from 'redis';
 import mongoose from 'mongoose';
 import app from './src/app.js';
 import connectDB from './src/config/db.js';
@@ -89,23 +90,37 @@ const startServer = async () => {
 
     if (isMultiDbMode) {
       console.log('🚀 Multi-database mode detected - connecting to 3 clusters...');
-      
-      // CRITICAL FIX: Connect mongoose default connection to PRIMARY first
-      // This ensures all models use primary DB by default
       await mongoose.connect(process.env.MONGO_URI_PRIMARY, connectionOptions);
       console.log('✅ Mongoose default connection set to PRIMARY DB');
-      
-      // Then connect other databases
       await connectAllDatabases();
     } else {
       console.log('📦 Single database mode - connecting to MongoDB...');
       await connectDB();
     }
 
-    // Connect to Redis (optional - non-blocking)
-    connectRedis().catch(() => {}); // Don't await - let it connect in background
+    // Connect to Redis AND apply Socket.IO adapter for multi-server real-time sync
+    // Without this, chat/notifications between users on different servers break
+    if (process.env.REDIS_URL) {
+      try {
+        // Create 2 dedicated Redis clients for Socket.IO adapter (pub + sub)
+        const pubClient = createClient({ url: process.env.REDIS_URL });
+        const subClient = pubClient.duplicate();
 
-    // Start server immediately after MongoDB
+        await Promise.all([pubClient.connect(), subClient.connect()]);
+        io.adapter(createAdapter(pubClient, subClient));
+        console.log('✅ Socket.IO Redis adapter enabled — multi-server real-time sync active');
+
+        // Also connect the app-level Redis for caching
+        connectRedis().catch(() => {});
+      } catch (err) {
+        console.warn('⚠️ Redis adapter failed — falling back to single-server mode:', err.message);
+        connectRedis().catch(() => {});
+      }
+    } else {
+      console.log('ℹ️  No REDIS_URL — Socket.IO running in single-server mode');
+    }
+
+    // Start server
     server.listen(PORT, () => {
       console.log(`✓ Server running on port ${PORT}`);
       console.log(`✓ Environment: ${process.env.NODE_ENV || 'development'}`);

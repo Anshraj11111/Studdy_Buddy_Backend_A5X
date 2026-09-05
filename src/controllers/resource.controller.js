@@ -4,6 +4,7 @@ import { generateVideoToken, verifyVideoToken } from '../utils/videoToken.js';
 import Resource from '../models/Resource.js';
 import Module from '../models/Module.js';
 import CourseEnrollment from '../models/CourseEnrollment.js';
+import { getCache, setCache, deleteCache } from '../config/redis.js';
 
 // Helper — extract YouTube video ID from a stored URL
 function extractYouTubeId(url) {
@@ -141,11 +142,12 @@ export const createResource = async (req, res) => {
     // Award XP for uploading a resource
     addXP(req.user._id, 20);
 
+    // Invalidate resources cache so new resource shows up immediately
+    deleteCache('resources:*').catch(() => {});
+
     res.status(201).json({
       success: true,
-      data: {
-        resource,
-      },
+      data: { resource },
     });
   } catch (error) {
     res.status(400).json({
@@ -164,48 +166,42 @@ export const createResource = async (req, res) => {
  */
 export const getResources = async (req, res) => {
   try {
-    const { page = 1, limit = 10, topic, uploadedBy, tags } = req.query;
+    const { page = 1, limit = 10, topic, uploadedBy, tags, search } = req.query;
 
-    // Validate pagination
     const pageNum = Math.max(1, parseInt(page) || 1);
     const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 10));
 
-    // Build filters
     const filters = {};
     if (topic) filters.topic = topic;
     if (uploadedBy) filters.uploadedBy = uploadedBy;
-    if (tags) {
-      filters.tags = Array.isArray(tags) ? tags : [tags];
+    if (tags) filters.tags = Array.isArray(tags) ? tags : [tags];
+    if (search) filters.search = search;
+
+    // Cache key based on query params — TTL 3 min
+    const cacheKey = `resources:${JSON.stringify({ pageNum, limitNum, ...filters })}`;
+    const cached = await getCache(cacheKey);
+    if (cached) {
+      return res.status(200).json(cached);
     }
 
-    // Get resources
-    const resources = await resourceService.getResources(filters, {
-      page: pageNum,
-      limit: limitNum,
-    });
-
-    // Get total count
+    const resources = await resourceService.getResources(filters, { page: pageNum, limit: limitNum });
     const total = await resourceService.getResourceCount(filters);
 
-    res.status(200).json({
+    const response = {
       success: true,
       data: {
         resources,
-        pagination: {
-          page: pageNum,
-          limit: limitNum,
-          total,
-          pages: Math.ceil(total / limitNum),
-        },
+        pagination: { page: pageNum, limit: limitNum, total, pages: Math.ceil(total / limitNum) },
       },
-    });
+    };
+
+    await setCache(cacheKey, response, 180); // 3 min TTL
+
+    res.status(200).json(response);
   } catch (error) {
     res.status(500).json({
       success: false,
-      error: {
-        message: 'Failed to fetch resources',
-        code: 'SERVER_ERROR',
-      },
+      error: { message: 'Failed to fetch resources', code: 'SERVER_ERROR' },
     });
   }
 };
