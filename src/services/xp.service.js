@@ -86,8 +86,6 @@ export const addXP = async (userId, action, override) => {
     }
 
     const totalXP   = amount + streakBonus;
-    const newXP     = (user.xp || 0) + totalXP;
-    const newTokens = Math.floor(newXP / XP_PER_TOKEN);
 
     // ── Build history entries ─────────────────────────────────────────────
     const historyEntries = [{ action, amount, createdAt: now }];
@@ -96,18 +94,30 @@ export const addXP = async (userId, action, override) => {
     }
 
     // ── Persist ───────────────────────────────────────────────────────────
-    await User.findByIdAndUpdate(userId, {
-      $set: {
-        xp:     newXP,
-        tokens: newTokens,
-        'streak.current':          newStreak,
-        'streak.longest':          Math.max(newStreak, user.streak?.longest ?? 0),
-        'streak.lastActivityDate': isFirstToday ? now : user.streak?.lastActivityDate,
+    // Use $inc for xp so concurrent calls don't overwrite each other.
+    // Tokens must be recalculated after the atomic increment; we derive the
+    // new token count from the document returned by findByIdAndUpdate.
+    const updated = await User.findByIdAndUpdate(
+      userId,
+      {
+        $inc: { xp: totalXP },
+        $set: {
+          'streak.current':          newStreak,
+          'streak.longest':          Math.max(newStreak, user.streak?.longest ?? 0),
+          'streak.lastActivityDate': isFirstToday ? now : user.streak?.lastActivityDate,
+        },
+        $push: {
+          xpHistory: { $each: historyEntries, $slice: -200 },
+        },
       },
-      $push: {
-        xpHistory: { $each: historyEntries, $slice: -200 }, // keep last 200 entries
-      },
-    });
+      { new: true, select: 'xp' }, // return updated doc to recalculate tokens
+    );
+
+    // Recalculate tokens based on the authoritative post-increment xp value
+    if (updated) {
+      const newTokens = Math.floor(updated.xp / XP_PER_TOKEN);
+      await User.findByIdAndUpdate(userId, { $set: { tokens: newTokens } });
+    }
   } catch (err) {
     console.error('XP update failed:', err.message);
   }

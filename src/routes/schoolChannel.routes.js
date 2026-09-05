@@ -4,17 +4,19 @@ import schoolChannelController from '../controllers/schoolChannel.controller.js'
 
 const router = express.Router();
 
-// Admin secret middleware for admin routes
-const adminAuth = (req, res, next) => {
-  const secret = req.headers['x-admin-secret'];
-  const expected = process.env.ADMIN_SECRET || 'H5';
-  if (secret && secret === expected) {
-    // Admin secret is valid, skip JWT auth
-    return next();
+// Admin auth — x-admin-secret header check. Secret is backend env only.
+const isAdminUser = (req, res, next) => {
+  const secret   = req.headers['x-admin-secret'];
+  const expected = process.env.ADMIN_SECRET;
+  if (!expected) {
+    return res.status(500).json({ success: false, error: { message: 'ADMIN_SECRET not configured on server' } });
   }
-  // If no admin secret, fall through to JWT auth
-  return authenticate(req, res, next);
+  if (!secret || secret !== expected) {
+    return res.status(401).json({ success: false, error: { message: 'Unauthorized' } });
+  }
+  next();
 };
+const adminAuth = [authenticate, isAdminUser];
 
 // Admin routes - accept either admin secret or JWT token
 router.get('/admin/all', adminAuth, schoolChannelController.getAllChannels);

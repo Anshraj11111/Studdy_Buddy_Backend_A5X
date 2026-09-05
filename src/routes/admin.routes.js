@@ -37,10 +37,14 @@ import { authenticate } from '../middleware/auth.middleware.js';
 
 const router = express.Router();
 
-// Admin secret middleware  checks x-admin-secret header
+// Admin auth — checks x-admin-secret header against ADMIN_SECRET env var.
+// Secret lives only in backend env, never in client JS bundle.
 const adminAuth = (req, res, next) => {
-  const secret = req.headers['x-admin-secret'];
-  const expected = process.env.ADMIN_SECRET || 'H5';
+  const secret   = req.headers['x-admin-secret'];
+  const expected = process.env.ADMIN_SECRET;
+  if (!expected) {
+    return res.status(500).json({ success: false, error: { message: 'ADMIN_SECRET not configured on server' } });
+  }
   if (!secret || secret !== expected) {
     return res.status(401).json({ success: false, error: { message: 'Unauthorized' } });
   }
