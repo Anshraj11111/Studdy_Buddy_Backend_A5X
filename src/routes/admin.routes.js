@@ -4,6 +4,7 @@ import {
   getUsers, 
   toggleUserActive, 
   deleteUser,
+  updateUser,
   preRegisterStudent,
   getPreRegisteredStudents,
   deletePreRegisteredStudent,
@@ -56,6 +57,7 @@ router.use(adminAuth);
 router.get('/stats', getStats);
 router.get('/users', getUsers);
 router.put('/users/:id/toggle', toggleUserActive);
+router.put('/users/:id', updateUser);
 router.delete('/users/:id', deleteUser);
 
 // Pre-registration routes

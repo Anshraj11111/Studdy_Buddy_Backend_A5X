@@ -39,11 +39,13 @@ export const getUsers = async (req, res) => {
       { email: { $regex: search, $options: 'i' } },
     ];
 
+    // select('+schoolPassword') explicitly includes it since toJSON strips it
     const users = await User.find(filter)
       .select('-password')
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
-      .limit(Number(limit));
+      .limit(Number(limit))
+      .lean(); // lean() bypasses toJSON so schoolPassword is included
 
     const total = await User.countDocuments(filter);
 
@@ -77,6 +79,34 @@ export const deleteUser = async (req, res) => {
   }
 };
 
+// Update user fields (schoolName, schoolPassword, city, name) from admin panel
+export const updateUser = async (req, res) => {
+  try {
+    const { name, schoolName, schoolPassword, city } = req.body;
+
+    // Build update object — only set fields that were actually sent
+    const update = {};
+    if (name !== undefined)           update.name           = name.trim();
+    if (schoolName !== undefined)     update.schoolName     = schoolName.trim();
+    if (schoolPassword !== undefined) update.schoolPassword = schoolPassword.trim(); // empty string = remove
+    if (city !== undefined)           update.city           = city.trim();
+
+    // Use lean() so toJSON() doesn't strip schoolPassword from the response
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      { $set: update },
+      { new: true, runValidators: true, lean: true }
+    );
+    if (!user) return res.status(404).json({ success: false, error: { message: 'User not found' } });
+
+    // Strip login password before sending
+    const { password, ...safeUser } = user;
+    res.json({ success: true, data: { user: safeUser } });
+  } catch (err) {
+    res.status(500).json({ success: false, error: { message: err.message } });
+  }
+};
+
 // Pre-register student with school password
 export const preRegisterStudent = async (req, res) => {
   try {
@@ -102,9 +132,54 @@ export const preRegisterStudent = async (req, res) => {
     // Check if email already used by a registered user
     const existingUser = await User.findOne({ email });
     if (existingUser) {
+      // If user exists but doesn't have school code/password, update their account
+      if (!existingUser.schoolName && !existingUser.schoolPassword) {
+        const updateData = {
+          schoolName: schoolName || '',
+          schoolPassword,
+        };
+        
+        // Update user with school credentials
+        await User.findByIdAndUpdate(existingUser._id, { $set: updateData });
+        
+        // ALSO create a PreRegistered entry for tracking/display in admin panel
+        // Mark it as "used" immediately since user already exists
+        let createdById = req.user?._id;
+        if (!createdById) {
+          const adminUser = await User.findOne({ role: 'admin' });
+          if (!adminUser) {
+            const anyUser = await User.findOne();
+            createdById = anyUser?._id;
+          } else {
+            createdById = adminUser._id;
+          }
+        }
+        
+        const preRegistered = await PreRegisteredStudent.create({
+          name,
+          email,
+          phone: phone || '',
+          schoolName: schoolName || '',
+          schoolPassword,
+          createdBy: createdById,
+          isUsed: true,
+          usedAt: new Date(),
+        });
+        
+        return res.status(201).json({
+          success: true,
+          message: 'School credentials added to existing user account',
+          data: { 
+            preRegistered,
+            updatedExistingUser: true 
+          },
+        });
+      }
+      
+      // User already has school credentials
       return res.status(409).json({
         success: false,
-        error: { message: 'Email already registered by a user' },
+        error: { message: 'Email already registered by a user with school credentials' },
       });
     }
 
