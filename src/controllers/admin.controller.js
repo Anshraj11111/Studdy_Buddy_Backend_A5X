@@ -99,9 +99,17 @@ export const updateUser = async (req, res) => {
     );
     if (!user) return res.status(404).json({ success: false, error: { message: 'User not found' } });
 
+    // Calculate hasFreeAccess manually since lean() bypasses toJSON()
+    user.hasFreeAccess = !!(user.schoolName && user.schoolPassword) || user.isPremium;
+    
     // Strip login password before sending
     const { password, ...safeUser } = user;
-    res.json({ success: true, data: { user: safeUser } });
+    
+    res.json({ 
+      success: true, 
+      data: { user: safeUser },
+      message: 'User updated. They must re-login to see access changes.' 
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: { message: err.message } });
   }
