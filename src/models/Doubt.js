@@ -45,8 +45,13 @@ const doubtSchema = new mongoose.Schema(
         },
         content: {
           type: String,
-          required: true,
+          required: false, // Content OR images can be present
           trim: true,
+          default: '',
+        },
+        images: {
+          type: [String],
+          default: [],
         },
         createdAt: {
           type: Date,

@@ -264,13 +264,14 @@ class DoubtService {
             replies: {
               user: replyData.user,
               content: replyData.content,
+              images: replyData.images || [],
               createdAt: new Date(),
             },
           },
         },
         { new: true }
-      ).populate('userId', 'name email')
-       .populate('replies.user', 'name email');
+      ).populate('userId', 'name email profileImage')
+       .populate('replies.user', 'name email profileImage');
 
       return doubt;
     } catch (error) {
@@ -284,9 +285,10 @@ class DoubtService {
    * @param {string} replyId - Reply ID
    * @param {string} userId - User ID (for authorization)
    * @param {string} content - New content
+   * @param {Array} images - Array of image URLs
    * @returns {Promise<Object>} Updated doubt
    */
-  async editReply(doubtId, replyId, userId, content) {
+  async editReply(doubtId, replyId, userId, content, images = []) {
     try {
       const doubt = await Doubt.findById(doubtId);
       if (!doubt) return null;
@@ -300,10 +302,11 @@ class DoubtService {
       }
 
       reply.content = content;
+      reply.images = images;
       await doubt.save();
 
-      await doubt.populate('userId', 'name email');
-      await doubt.populate('replies.user', 'name email');
+      await doubt.populate('userId', 'name email profileImage');
+      await doubt.populate('replies.user', 'name email profileImage');
 
       return doubt;
     } catch (error) {
@@ -331,8 +334,10 @@ class DoubtService {
         throw new Error('Unauthorized');
       }
 
-      reply.remove();
-      await doubt.save();
+      // Use pull() instead of remove() for Mongoose 6+
+      doubt.replies.pull(replyId);
+      // Skip validation on save (to avoid content required error on other replies)
+      await doubt.save({ validateModifiedOnly: true });
 
       await doubt.populate('userId', 'name email');
       await doubt.populate('replies.user', 'name email');

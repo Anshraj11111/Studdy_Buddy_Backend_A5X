@@ -465,13 +465,14 @@ export const deleteDoubt = async (req, res) => {
 export const addReply = async (req, res) => {
   try {
     const { id } = req.params;
-    const { content } = req.body;
+    const { content, images } = req.body;
 
-    if (!content || !content.trim()) {
+    // At least content or images required
+    if ((!content || !content.trim()) && (!images || images.length === 0)) {
       return res.status(400).json({
         success: false,
         error: {
-          message: 'Reply content is required',
+          message: 'Reply content or images are required',
           code: 'VALIDATION_ERROR',
         },
       });
@@ -479,7 +480,8 @@ export const addReply = async (req, res) => {
 
     const doubt = await doubtService.addReply(id, {
       user: req.user._id,
-      content: content.trim(),
+      content: content?.trim() || '',
+      images: images || [], // Array of Cloudinary URLs
     });
 
     if (!doubt) {
@@ -518,19 +520,26 @@ export const addReply = async (req, res) => {
 export const editReply = async (req, res) => {
   try {
     const { id, replyId } = req.params;
-    const { content } = req.body;
+    const { content, images } = req.body;
 
-    if (!content || !content.trim()) {
+    // At least content or images required
+    if ((!content || !content.trim()) && (!images || images.length === 0)) {
       return res.status(400).json({
         success: false,
         error: {
-          message: 'Reply content is required',
+          message: 'Reply content or images are required',
           code: 'VALIDATION_ERROR',
         },
       });
     }
 
-    const doubt = await doubtService.editReply(id, replyId, req.user._id, content.trim());
+    const doubt = await doubtService.editReply(
+      id, 
+      replyId, 
+      req.user._id, 
+      content?.trim() || '', 
+      images || []
+    );
 
     if (!doubt) {
       return res.status(404).json({
