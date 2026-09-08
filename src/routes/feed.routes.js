@@ -20,11 +20,11 @@ const emitNotification = (io, userId, notification) => {
 // GET /api/feed?category=Robotics&page=1&limit=20
 router.get('/', authenticate, async (req, res) => {
   try {
-    const { category, page = 1, limit = 20, search = '' } = req.query;
+    const { category, page = 1, limit = 20, search = '', userId } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     // Cache key — TTL 2 min (feed changes frequently)
-    const cacheKey = `feed:${category || 'All'}:${page}:${limit}:${search.trim()}`;
+    const cacheKey = `feed:${category || 'All'}:${page}:${limit}:${search.trim()}:${userId || ''}`;
     const cached = await getCache(cacheKey);
     if (cached) return res.json(cached);
 
@@ -32,6 +32,10 @@ router.get('/', authenticate, async (req, res) => {
     if (category && category !== 'All') query.category = category;
     if (search.trim()) {
       query.content = { $regex: search.trim(), $options: 'i' };
+    }
+    // Filter by specific user if userId provided
+    if (userId) {
+      query.userId = userId;
     }
 
     const posts = await FeedPost.find(query)
@@ -119,6 +123,52 @@ router.delete('/:id', authenticate, async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, error: { message: 'Failed to delete post' } });
+  }
+});
+
+// PUT /api/feed/:id - Edit post
+router.put('/:id', authenticate, async (req, res) => {
+  try {
+    const { content, category, mediaUrl, mediaType } = req.body;
+    
+    const post = await FeedPost.findById(req.params.id);
+    if (!post) return res.status(404).json({ success: false, error: { message: 'Post not found' } });
+    if (String(post.userId) !== String(req.user._id)) {
+      return res.status(403).json({ success: false, error: { message: 'Not authorized to edit this post' } });
+    }
+
+    // Content moderation - block abusive words
+    if (content?.trim()) {
+      const modResult = checkContent(content);
+      if (modResult.blocked) {
+        return res.status(400).json({ 
+          success: false, 
+          error: { 
+            message: modResult.reason,
+            code: 'CONTENT_BLOCKED'
+          } 
+        });
+      }
+    }
+
+    // Update fields
+    if (content !== undefined) post.content = content.trim();
+    if (category !== undefined) post.category = category;
+    if (mediaUrl !== undefined) post.mediaUrl = mediaUrl;
+    if (mediaType !== undefined) post.mediaType = mediaType;
+
+    await post.save();
+
+    const populated = await FeedPost.findById(post._id)
+      .populate('userId', 'name profileImage role skills')
+      .populate('comments.userId', 'name profileImage');
+
+    // Invalidate cache
+    deleteCache('feed:*').catch(() => {});
+
+    res.json({ success: true, data: { post: populated } });
+  } catch (err) {
+    res.status(500).json({ success: false, error: { message: 'Failed to update post' } });
   }
 });
 

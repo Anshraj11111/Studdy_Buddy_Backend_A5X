@@ -45,11 +45,57 @@ export const addXP = async (userId, action, override) => {
     const amount = override ?? XP_REWARDS[action] ?? 0;
     if (!amount) return;
 
-    const user = await User.findById(userId).select('xp tokens streak xpHistory');
+    const user = await User.findById(userId).select('xp tokens streak xpHistory dailyPostCount lastPostDate');
     if (!user) return;
 
     const now   = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    // ── Daily post limit check (3 posts per day get XP) ──────────────────
+    if (action === 'post') {
+      const lastPostDate = user.lastPostDate 
+        ? new Date(user.lastPostDate.getFullYear(), user.lastPostDate.getMonth(), user.lastPostDate.getDate())
+        : null;
+      
+      const isSameDay = lastPostDate && lastPostDate.getTime() === today.getTime();
+      
+      // Check current count
+      const currentCount = isSameDay ? (user.dailyPostCount || 0) : 0;
+      
+      if (currentCount >= 3) {
+        // User has already posted 3 times today, no XP awarded
+        console.log(`⛔ Daily post limit reached for user ${userId}: ${currentCount}/3 posts`);
+        return;
+      }
+      
+      // Atomically increment the counter
+      if (isSameDay) {
+        await User.findByIdAndUpdate(userId, {
+          $inc: { dailyPostCount: 1 },
+          $set: { lastPostDate: now }
+        });
+      } else {
+        // New day, reset count to 1
+        await User.findByIdAndUpdate(userId, {
+          $set: { dailyPostCount: 1, lastPostDate: now }
+        });
+      }
+      
+      // Re-fetch updated count to verify (race condition protection)
+      const updatedUser = await User.findById(userId).select('dailyPostCount lastPostDate');
+      const updatedLastPostDate = updatedUser.lastPostDate 
+        ? new Date(updatedUser.lastPostDate.getFullYear(), updatedUser.lastPostDate.getMonth(), updatedUser.lastPostDate.getDate())
+        : null;
+      const stillSameDay = updatedLastPostDate && updatedLastPostDate.getTime() === today.getTime();
+      
+      if (stillSameDay && updatedUser.dailyPostCount > 3) {
+        // Race condition: another request incremented before us, revert
+        console.log(`⛔ Race condition detected for user ${userId}: ${updatedUser.dailyPostCount}/3 posts - reverting XP`);
+        return;
+      }
+      
+      console.log(`✅ Post XP awarded to user ${userId}: ${stillSameDay ? updatedUser.dailyPostCount : 1}/3 posts today`);
+    }
 
     // ── Streak logic ──────────────────────────────────────────────────────
     let streakBonus = 0;

@@ -69,6 +69,15 @@ const userSchema = new mongoose.Schema(
         createdAt: { type: Date, default: Date.now },
       },
     ],
+    dailyPostCount: {
+      type: Number,
+      default: 0,
+      min: [0, 'Daily post count cannot be negative'],
+    },
+    lastPostDate: {
+      type: Date,
+      default: null,
+    },
     profileImage: {
       type: String,
       default: '',
