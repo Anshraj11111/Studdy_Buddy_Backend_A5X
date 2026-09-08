@@ -140,7 +140,7 @@ export const createResource = async (req, res) => {
     });
 
     // Award XP for uploading a resource
-    addXP(req.user._id, 20);
+    await addXP(req.user._id, 'resource_upload');
 
     // Invalidate resources cache so new resource shows up immediately
     deleteCache('resources:*').catch(() => {});

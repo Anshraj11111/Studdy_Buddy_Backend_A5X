@@ -228,8 +228,8 @@ export const completeRequest = async (req, res) => {
     const request = await mentorService.completeRequest(id);
 
     // Award XP to mentor and student on session complete
-    if (request.mentorId?._id) addXP(request.mentorId._id, 50);
-    if (request.studentId?._id) addXP(request.studentId._id, 30);
+    if (request.mentorId?._id) await addXP(request.mentorId._id, 50);
+    if (request.studentId?._id) await addXP(request.studentId._id, 30);
 
     res.status(200).json({
       success: true,

@@ -495,7 +495,7 @@ export const addReply = async (req, res) => {
     }
 
     // Award XP for replying to a doubt
-    addXP(req.user._id, 15);
+    await addXP(req.user._id, 'doubt_posted'); // Replying is similar effort to posting
 
     res.status(200).json({
       success: true,
