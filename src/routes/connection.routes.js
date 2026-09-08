@@ -11,7 +11,7 @@ const { authenticate } = authMiddleware;
 // GET /api/connections/users?search=&page=1  — discover all users
 router.get('/users', authenticate, async (req, res) => {
   try {
-    const { search = '', page = 1, limit = 20 } = req.query;
+    const { search = '', page = 1, limit = 200 } = req.query; // Increased to 200 to show all users
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const query = {
@@ -30,6 +30,8 @@ router.get('/users', authenticate, async (req, res) => {
       .select('name email role skills profileImage')
       .skip(skip)
       .limit(parseInt(limit));
+
+    console.log(`📊 GET /users: Found ${users.length} users (excluding current user)`);
 
     const total = await User.countDocuments(query);
 
@@ -206,15 +208,25 @@ router.get('/my', authenticate, async (req, res) => {
       .populate('recipient', 'name email role skills profileImage')
       .sort({ updatedAt: -1 });
 
-    const connections = conns.map(c => {
+    // Filter out connections where populate returned null (deleted users)
+    const validConns = conns.filter(c => c.requester && c.recipient);
+
+    console.log(`📊 GET /my: Found ${conns.length} connections, ${validConns.length} valid (after filtering nulls)`);
+
+    const connections = validConns.map(c => {
       const other =
         String(c.requester._id) === String(req.user._id) ? c.recipient : c.requester;
-      return { connectionId: c._id, user: other };
+      return { 
+        connectionId: c._id, 
+        user: other,
+        isFollowing: false // Add default value
+      };
     });
 
     res.json({ success: true, data: { connections } });
   } catch (err) {
-    res.status(500).json({ success: false, error: { message: 'Failed to fetch connections' } });
+    console.error('❌ Error in GET /my:', err);
+    res.status(500).json({ success: false, error: { message: 'Failed to fetch connections', details: err.message } });
   }
 });
 
