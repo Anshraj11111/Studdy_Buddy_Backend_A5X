@@ -88,7 +88,7 @@ export const createDoubt = async (req, res) => {
     }
 
     // Award XP for posting a doubt
-    addXP(req.user._id, 10);
+    await addXP(req.user._id, 'doubt_posted');
 
     // Invalidate doubts list cache
     await cache.delPattern('doubts:list:');
