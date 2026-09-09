@@ -159,8 +159,9 @@ export const getModuleLectures = async (req, res) => {
 };
 
 /**
- * Get secure video URL (with token validation)
+ * Get secure video URL (with token-based security)
  * GET /api/courses/lectures/:lectureId/video-url
+ * Returns a short-lived token instead of direct URL
  */
 export const getSecureVideoUrl = async (req, res) => {
   try {
@@ -199,22 +200,17 @@ export const getSecureVideoUrl = async (req, res) => {
       });
     }
     
-    // Return the video URL (this will only be sent to authorized users)
-    const videoUrl = resource.fileUrl || resource.url;
-    
-    if (!videoUrl) {
-      return res.status(404).json({
-        success: false,
-        error: { message: 'Video URL not found in resource' },
-      });
-    }
+    // Generate a short-lived token (90 seconds) instead of returning URL directly
+    const { generateVideoToken } = await import('../utils/videoToken.js');
+    const token = generateVideoToken(String(lectureId), String(req.user._id));
     
     res.json({
       success: true,
       data: {
-        url: videoUrl,
+        token, // Return token instead of direct URL
         title: resource.title,
         type: resource.type || resource.fileType,
+        // URL will be fetched using this token in a separate request
       },
     });
   } catch (error) {
@@ -222,6 +218,61 @@ export const getSecureVideoUrl = async (req, res) => {
     res.status(500).json({
       success: false,
       error: { message: 'Failed to get video URL' },
+    });
+  }
+};
+
+/**
+ * Get actual video URL using token (very short-lived - 90 seconds)
+ * GET /api/courses/play/:token
+ * This endpoint verifies the token and returns the actual YouTube URL
+ */
+export const playVideoWithToken = async (req, res) => {
+  try {
+    const { token } = req.params;
+    
+    // Verify token
+    const { verifyVideoToken } = await import('../utils/videoToken.js');
+    const { resourceId, userId } = verifyVideoToken(token);
+    
+    // Ensure the user matches
+    if (String(userId) !== String(req.user._id)) {
+      return res.status(403).json({
+        success: false,
+        error: { message: 'Token user mismatch' },
+      });
+    }
+    
+    // Fetch resource
+    const resource = await Resource.findById(resourceId).lean();
+    
+    if (!resource) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'Resource not found' },
+      });
+    }
+    
+    const videoUrl = resource.fileUrl || resource.url;
+    
+    if (!videoUrl) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'Video URL not found' },
+      });
+    }
+    
+    res.json({
+      success: true,
+      data: {
+        url: videoUrl,
+      },
+    });
+  } catch (error) {
+    console.error('Play video with token error:', error);
+    res.status(403).json({
+      success: false,
+      error: { message: error.message || 'Invalid or expired token' },
     });
   }
 };
@@ -379,6 +430,7 @@ export default {
   getCourseById,
   getModuleLectures,
   getSecureVideoUrl,
+  playVideoWithToken,
   enrollInCourse,
   markVideoCompleted,
   getMyCourses,
