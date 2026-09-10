@@ -2,6 +2,7 @@ import Course from '../models/Course.js';
 import Module from '../models/Module.js';
 import Resource from '../models/Resource.js';
 import CourseEnrollment from '../models/CourseEnrollment.js';
+import { escapeRegex } from '../utils/sanitize.js';
 
 /**
  * Get all courses (with filtering)
@@ -17,10 +18,11 @@ export const getAllCourses = async (req, res) => {
     if (difficulty) filter.difficulty = difficulty;
     if (isPremium !== undefined) filter.isPremium = isPremium === 'true';
     if (search) {
+      const sanitized = escapeRegex(search);
       filter.$or = [
-        { title: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-        { tags: { $in: [new RegExp(search, 'i')] } },
+        { title: { $regex: sanitized, $options: 'i' } },
+        { description: { $regex: sanitized, $options: 'i' } },
+        { tags: { $in: [new RegExp(sanitized, 'i')] } },
       ];
     }
     

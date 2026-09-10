@@ -4,6 +4,7 @@ import User from '../models/User.js';
 import Notification from '../models/Notification.js';
 import authMiddleware from '../middleware/auth.middleware.js';
 import { sendPushToUser } from '../services/webPush.service.js';
+import { escapeRegex } from '../utils/sanitize.js';
 
 const router = express.Router();
 const { authenticate } = authMiddleware;
@@ -19,10 +20,11 @@ router.get('/users', authenticate, async (req, res) => {
     };
 
     if (search.trim()) {
+      const sanitized = escapeRegex(search.trim());
       query.$or = [
-        { name: { $regex: search.trim(), $options: 'i' } },
-        { skills: { $regex: search.trim(), $options: 'i' } },
-        { role: { $regex: search.trim(), $options: 'i' } },
+        { name: { $regex: sanitized, $options: 'i' } },
+        { skills: { $regex: sanitized, $options: 'i' } },
+        { role: { $regex: sanitized, $options: 'i' } },
       ];
     }
 

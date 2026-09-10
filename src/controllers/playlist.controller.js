@@ -1,5 +1,6 @@
 import Playlist from '../models/Playlist.js';
 import { generateVideoToken } from '../utils/videoToken.js';
+import { escapeRegex } from '../utils/sanitize.js';
 
 function extractYouTubeId(url) {
   if (!url) return null;
@@ -69,10 +70,11 @@ export const getPlaylists = async (req, res) => {
     const query = { isPublic: true };
     if (topic) query.topic = topic;
     if (search) {
+      const sanitized = escapeRegex(search);
       query.$or = [
-        { title: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-        { tags: { $regex: search, $options: 'i' } },
+        { title: { $regex: sanitized, $options: 'i' } },
+        { description: { $regex: sanitized, $options: 'i' } },
+        { tags: { $regex: sanitized, $options: 'i' } },
       ];
     }
 

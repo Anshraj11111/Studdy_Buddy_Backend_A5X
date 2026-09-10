@@ -1,6 +1,7 @@
 import Resource from '../models/Resource.js';
 import cloudinary from '../config/cloudinary.js';
 import { Readable } from 'stream';
+import { escapeRegex } from '../utils/sanitize.js';
 
 class ResourceService {
   /**
@@ -274,13 +275,14 @@ class ResourceService {
       const { page = 1, limit = 10 } = options;
       const skip = (page - 1) * limit;
 
+      const sanitized = escapeRegex(keyword);
       const resources = await Resource.find(
         {
           isPublic: true,
           $or: [
-            { title: { $regex: keyword, $options: 'i' } },
-            { description: { $regex: keyword, $options: 'i' } },
-            { tags: { $regex: keyword, $options: 'i' } },
+            { title: { $regex: sanitized, $options: 'i' } },
+            { description: { $regex: sanitized, $options: 'i' } },
+            { tags: { $regex: sanitized, $options: 'i' } },
           ],
         }
       )

@@ -4,6 +4,7 @@ import Notification from '../models/Notification.js';
 import authMiddleware from '../middleware/auth.middleware.js';
 import { addXP } from '../services/xp.service.js';
 import { checkContent } from '../utils/contentFilter.js';
+import { escapeRegex } from '../utils/sanitize.js';
 import { sendPushToUser } from '../services/webPush.service.js';
 import { getCache, setCache, deleteCache } from '../config/redis.js';
 
@@ -31,7 +32,7 @@ router.get('/', authenticate, async (req, res) => {
     const query = {};
     if (category && category !== 'All') query.category = category;
     if (search.trim()) {
-      query.content = { $regex: search.trim(), $options: 'i' };
+      query.content = { $regex: escapeRegex(search.trim()), $options: 'i' };
     }
     // Filter by specific user if userId provided
     if (userId) {

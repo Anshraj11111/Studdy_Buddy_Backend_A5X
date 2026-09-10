@@ -1,4 +1,5 @@
 import Doubt from '../models/Doubt.js';
+import { escapeRegex } from '../utils/sanitize.js';
 
 class DoubtService {
   /**
@@ -172,11 +173,12 @@ class DoubtService {
       const { page = 1, limit = 10 } = pagination;
       const skip = (page - 1) * limit;
 
+      const sanitized = escapeRegex(keyword);
       const doubts = await Doubt.find({
         $or: [
-          { title: { $regex: keyword, $options: 'i' } },
-          { description: { $regex: keyword, $options: 'i' } },
-          { tags: { $regex: keyword, $options: 'i' } },
+          { title: { $regex: sanitized, $options: 'i' } },
+          { description: { $regex: sanitized, $options: 'i' } },
+          { tags: { $regex: sanitized, $options: 'i' } },
         ],
       })
         .populate('userId', 'name email profileImage')

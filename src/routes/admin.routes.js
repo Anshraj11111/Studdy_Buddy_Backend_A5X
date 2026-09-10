@@ -33,6 +33,12 @@ import {
   // Post Moderation
   getAllPosts,
   adminDeletePost,
+  // Doubts Management
+  getAllDoubts,
+  adminUpdateDoubt,
+  adminDeleteDoubt,
+  adminUpdateReply,
+  adminDeleteReply,
 } from '../controllers/admin.controller.js';
 import { authenticate } from '../middleware/auth.middleware.js';
 
@@ -98,5 +104,12 @@ router.delete('/lectures/:id', deleteLecture);
 // Post moderation routes
 router.get('/posts', getAllPosts);
 router.delete('/posts/:id', adminDeletePost);
+
+// Doubts management routes
+router.get('/doubts', getAllDoubts);
+router.put('/doubts/:id', adminUpdateDoubt);
+router.delete('/doubts/:id', adminDeleteDoubt);
+router.put('/doubts/:doubtId/replies/:replyId', adminUpdateReply);
+router.delete('/doubts/:doubtId/replies/:replyId', adminDeleteReply);
 
 export default router;

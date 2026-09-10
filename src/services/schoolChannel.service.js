@@ -1,6 +1,7 @@
 import SchoolChannel from '../models/SchoolChannel.js';
 import SchoolChannelMessage from '../models/SchoolChannelMessage.js';
 import User from '../models/User.js';
+import { escapeRegex } from '../utils/sanitize.js';
 
 class SchoolChannelService {
   /**
@@ -27,9 +28,11 @@ class SchoolChannelService {
 
       // If not found by channelId, try case-insensitive search on schoolName and city
       if (!channel) {
+        const sanitizedSchool = escapeRegex(user.schoolName.trim());
+        const sanitizedCity = escapeRegex(user.city.trim());
         channel = await SchoolChannel.findOne({
-          schoolName: { $regex: new RegExp(`^${user.schoolName.trim()}$`, 'i') },
-          city: { $regex: new RegExp(`^${user.city.trim()}$`, 'i') },
+          schoolName: { $regex: new RegExp(`^${sanitizedSchool}$`, 'i') },
+          city: { $regex: new RegExp(`^${sanitizedCity}$`, 'i') },
         })
           .populate('createdBy', 'name email profileImage')
           .lean();
@@ -533,7 +536,7 @@ class SchoolChannelService {
       }
 
       if (search) {
-        query.content = { $regex: search, $options: 'i' };
+        query.content = { $regex: escapeRegex(search), $options: 'i' };
       }
 
       if (dateFrom || dateTo) {

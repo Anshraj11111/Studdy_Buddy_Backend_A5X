@@ -3,6 +3,7 @@ import PreRegisteredStudent from '../models/PreRegisteredStudent.js';
 import Payment from '../models/Payment.js';
 import AppSettings from '../models/AppSettings.js';
 import mongoose from 'mongoose';
+import { escapeRegex } from '../utils/sanitize.js';
 
 // Lazy-load models to avoid circular deps
 const getDoubt = async () => (await import('../models/Doubt.js')).default;
@@ -34,10 +35,13 @@ export const getUsers = async (req, res) => {
     const { role, search, page = 1, limit = 50 } = req.query;
     const filter = {};
     if (role) filter.role = role;
-    if (search) filter.$or = [
-      { name: { $regex: search, $options: 'i' } },
-      { email: { $regex: search, $options: 'i' } },
-    ];
+    if (search) {
+      const sanitized = escapeRegex(search);
+      filter.$or = [
+        { name: { $regex: sanitized, $options: 'i' } },
+        { email: { $regex: sanitized, $options: 'i' } },
+      ];
+    }
 
     // select('+schoolPassword') explicitly includes it since toJSON strips it
     const users = await User.find(filter)
@@ -235,9 +239,10 @@ export const getPreRegisteredStudents = async (req, res) => {
     }
     
     if (search) {
+      const sanitized = escapeRegex(search);
       filter.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } },
+        { name: { $regex: sanitized, $options: 'i' } },
+        { email: { $regex: sanitized, $options: 'i' } },
       ];
     }
 
@@ -647,9 +652,10 @@ export const getAllCourses = async (req, res) => {
     
     if (topic) filter.topic = topic;
     if (search) {
+      const sanitized = escapeRegex(search);
       filter.$or = [
-        { title: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
+        { title: { $regex: sanitized, $options: 'i' } },
+        { description: { $regex: sanitized, $options: 'i' } },
       ];
     }
 
@@ -1046,7 +1052,7 @@ export const getAllPosts = async (req, res) => {
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const filter = search
-      ? { content: { $regex: search, $options: 'i' } }
+      ? { content: { $regex: escapeRegex(search), $options: 'i' } }
       : {};
 
     const [posts, total] = await Promise.all([
@@ -1092,5 +1098,243 @@ export const adminDeletePost = async (req, res) => {
   } catch (err) {
     console.error('Admin deletePost error:', err);
     res.status(500).json({ success: false, error: { message: err.message } });
+  }
+};
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Doubts Management
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Get all doubts with replies (Admin Only)
+ * GET /api/admin/doubts
+ */
+export const getAllDoubts = async (req, res) => {
+  try {
+    const { page = 1, limit = 20, status, topic, search } = req.query;
+    
+    const query = {};
+    if (status) query.status = status;
+    if (topic) query.topic = topic;
+    if (search) {
+      // Sanitize search input to prevent regex injection
+      const sanitizedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      query.$or = [
+        { title: { $regex: sanitizedSearch, $options: 'i' } },
+        { description: { $regex: sanitizedSearch, $options: 'i' } },
+      ];
+    }
+
+    const Doubt = await getDoubt();
+    const skip = (page - 1) * limit;
+
+    const doubts = await Doubt.find(query)
+      .populate('userId', 'name email profileImage school')
+      .populate('replies.user', 'name email profileImage role')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    const total = await Doubt.countDocuments(query);
+
+    res.json({
+      success: true,
+      data: {
+        doubts,
+        pagination: {
+          total,
+          page: parseInt(page),
+          pages: Math.ceil(total / limit),
+          limit: parseInt(limit),
+        },
+      },
+    });
+  } catch (error) {
+    console.error('Error fetching doubts:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to fetch doubts', code: 'SERVER_ERROR' },
+    });
+  }
+};
+
+/**
+ * Update doubt (Admin Only)
+ * PUT /api/admin/doubts/:id
+ */
+export const adminUpdateDoubt = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title, description, topic, status } = req.body;
+
+    const Doubt = await getDoubt();
+    const doubt = await Doubt.findById(id);
+
+    if (!doubt) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'Doubt not found', code: 'NOT_FOUND' },
+      });
+    }
+
+    if (title) doubt.title = title;
+    if (description) doubt.description = description;
+    if (topic) doubt.topic = topic;
+    if (status) doubt.status = status;
+
+    await doubt.save();
+
+    const updatedDoubt = await Doubt.findById(id)
+      .populate('userId', 'name email profileImage')
+      .populate('replies.user', 'name email profileImage role');
+
+    res.json({
+      success: true,
+      data: { doubt: updatedDoubt },
+      message: 'Doubt updated successfully',
+    });
+  } catch (error) {
+    console.error('Error updating doubt:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to update doubt', code: 'SERVER_ERROR' },
+    });
+  }
+};
+
+/**
+ * Delete doubt (Admin Only)
+ * DELETE /api/admin/doubts/:id
+ */
+export const adminDeleteDoubt = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const Doubt = await getDoubt();
+    const doubt = await Doubt.findByIdAndDelete(id);
+
+    if (!doubt) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'Doubt not found', code: 'NOT_FOUND' },
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Doubt deleted successfully',
+    });
+  } catch (error) {
+    console.error('Error deleting doubt:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to delete doubt', code: 'SERVER_ERROR' },
+    });
+  }
+};
+
+/**
+ * Update reply (Admin Only)
+ * PUT /api/admin/doubts/:doubtId/replies/:replyId
+ */
+export const adminUpdateReply = async (req, res) => {
+  try {
+    const { doubtId, replyId } = req.params;
+    const { content } = req.body;
+
+    if (!content || !content.trim()) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'Reply content is required', code: 'VALIDATION_ERROR' },
+      });
+    }
+
+    const Doubt = await getDoubt();
+    const doubt = await Doubt.findById(doubtId);
+
+    if (!doubt) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'Doubt not found', code: 'NOT_FOUND' },
+      });
+    }
+
+    const reply = doubt.replies.id(replyId);
+    if (!reply) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'Reply not found', code: 'NOT_FOUND' },
+      });
+    }
+
+    reply.content = content.trim();
+    reply.isEdited = true;
+    reply.editedAt = new Date();
+
+    await doubt.save();
+
+    const updatedDoubt = await Doubt.findById(doubtId)
+      .populate('userId', 'name email profileImage')
+      .populate('replies.user', 'name email profileImage role');
+
+    res.json({
+      success: true,
+      data: { doubt: updatedDoubt },
+      message: 'Reply updated successfully',
+    });
+  } catch (error) {
+    console.error('Error updating reply:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to update reply', code: 'SERVER_ERROR' },
+    });
+  }
+};
+
+/**
+ * Delete reply (Admin Only)
+ * DELETE /api/admin/doubts/:doubtId/replies/:replyId
+ */
+export const adminDeleteReply = async (req, res) => {
+  try {
+    const { doubtId, replyId } = req.params;
+
+    const Doubt = await getDoubt();
+    const doubt = await Doubt.findById(doubtId);
+
+    if (!doubt) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'Doubt not found', code: 'NOT_FOUND' },
+      });
+    }
+
+    const reply = doubt.replies.id(replyId);
+    if (!reply) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'Reply not found', code: 'NOT_FOUND' },
+      });
+    }
+
+    reply.remove();
+    await doubt.save();
+
+    const updatedDoubt = await Doubt.findById(doubtId)
+      .populate('userId', 'name email profileImage')
+      .populate('replies.user', 'name email profileImage role');
+
+    res.json({
+      success: true,
+      data: { doubt: updatedDoubt },
+      message: 'Reply deleted successfully',
+    });
+  } catch (error) {
+    console.error('Error deleting reply:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to delete reply', code: 'SERVER_ERROR' },
+    });
   }
 };
