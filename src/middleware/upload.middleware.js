@@ -40,4 +40,7 @@ const upload = multer({
   },
 });
 
+// Export single file upload
+export const uploadSingle = (fieldName) => upload.single(fieldName);
+
 export default upload;

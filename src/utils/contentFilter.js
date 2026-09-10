@@ -49,12 +49,22 @@ const EXACT_TERMS = [
   'horny',
 
   // ── Romantic / solicitation ──────────────────────────────────────────────
+  'i love you', 'i luv u', 'i luv you', 'love u', 'luv u',
+  'i miss you', 'miss u', 'missing you',
+  'marry me', 'shaadi karogi', 'shadi karoge',
+  'my love', 'my darling', 'my sweetheart', 'my baby', 'my babe',
+  'you are so hot', 'you are sexy', 'so hot', 'so sexy',
+  'i want you', 'i need you',
+  'kiss me', 'hug me', 'kisses', 'hugs and kisses',
   'send nudes', 'send pics', 'send photo',
   'apna number do', 'number share', 'number do',
   'personal number', 'whatsapp number', 'instagram id',
   'will you be my girlfriend', 'will you be my boyfriend',
   'be my gf', 'be my bf',
   'date me', 'date with me', 'lets meet',
+  'crush on you', 'i have crush', 'you are my crush',
+  'pyaar', 'mohabbat', 'ishq',
+  'jaan', 'jaanu', 'baby', 'babe', 'sweety', 'cutie',
 
   // ── Hindi/Hinglish — multi-word phrases ──────────────────────────────────
   'tere maa ki', 'teri maa', 'teri ma',

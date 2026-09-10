@@ -15,8 +15,13 @@ const messageSchema = new mongoose.Schema(
     },
     content: {
       type: String,
-      required: true,
+      required: false, // Made optional because image-only messages are allowed
       maxlength: 5000,
+      default: '',
+    },
+    imageUrl: {
+      type: String,
+      required: false,
     },
   },
   { timestamps: true }

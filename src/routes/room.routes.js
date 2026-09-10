@@ -1,8 +1,11 @@
 import express from 'express';
 import { authenticate } from '../middleware/auth.middleware.js';
+import { uploadSingle } from '../middleware/upload.middleware.js';
 import matchService from '../services/match.service.js';
 import messageService from '../services/message.service.js';
 import Room from '../models/Room.js';
+import { checkContent } from '../utils/contentFilter.js';
+import logger from '../utils/logger.js';
 
 const router = express.Router();
 
@@ -126,6 +129,144 @@ router.get('/:id', authenticate, async (req, res) => {
         message: 'Failed to fetch room',
         code: 'SERVER_ERROR',
       },
+    });
+  }
+});
+
+/**
+ * Send image message in a room
+ * POST /api/rooms/send-image
+ */
+router.post('/send-image', authenticate, uploadSingle('image'), async (req, res) => {
+  try {
+    const { roomId, userId, content } = req.body;
+    const imageFile = req.file;
+
+    if (!roomId || !userId) {
+      return res.status(400).json({ 
+        success: false, 
+        error: { message: 'roomId and userId are required' } 
+      });
+    }
+
+    if (!imageFile) {
+      return res.status(400).json({ 
+        success: false, 
+        error: { message: 'Image file is required' } 
+      });
+    }
+
+    // Verify user is participant in room
+    const room = await Room.findById(roomId);
+    if (!room) {
+      return res.status(404).json({ 
+        success: false, 
+        error: { message: 'Room not found' } 
+      });
+    }
+
+    const isParticipant = 
+      room.student1.toString() === userId.toString() || 
+      room.student2.toString() === userId.toString();
+
+    if (!isParticipant) {
+      return res.status(403).json({ 
+        success: false, 
+        error: { message: 'You are not authorized to send messages in this room' } 
+      });
+    }
+
+    // Check content if text is provided
+    if (content && content.trim()) {
+      const modResult = checkContent(content);
+      if (modResult.blocked) {
+        return res.status(400).json({
+          success: false,
+          error: { message: modResult.reason },
+        });
+      }
+    }
+
+    // Upload image to Cloudinary
+    let imageUrl = '';
+    if (imageFile.buffer) {
+      // Upload from memory buffer
+      const cloudinary = await import('../config/cloudinary.js').then(m => m.default);
+      const uploadResult = await new Promise((resolve, reject) => {
+        const uploadStream = cloudinary.uploader.upload_stream(
+          {
+            folder: 'chat-images',
+            resource_type: 'auto',
+          },
+          (error, result) => {
+            if (error) reject(error);
+            else resolve(result);
+          }
+        );
+        uploadStream.end(imageFile.buffer);
+      });
+      imageUrl = uploadResult.secure_url;
+    } else if (imageFile.path) {
+      imageUrl = imageFile.path;
+    }
+
+    // Save message with image
+    const message = await messageService.saveMessageWithImage(
+      userId, 
+      roomId, 
+      content?.trim() || '', 
+      imageUrl
+    );
+
+    // Emit via socket
+    const io = req.app.get('io');
+    if (io) {
+      io.to(roomId).emit('messageReceived', {
+        _id: message._id,
+        senderId: message.senderId,
+        content: message.content,
+        imageUrl: message.imageUrl,
+        createdAt: message.createdAt,
+        temp: false,
+      });
+
+      // Send notification to other user
+      try {
+        const recipientId = room.student1.toString() === userId.toString()
+          ? room.student2.toString()
+          : room.student1.toString();
+
+        const Notification = await import('../models/Notification.js').then(m => m.default);
+        const notif = await Notification.create({
+          recipient: recipientId,
+          sender: userId,
+          type: 'message',
+          message: `sent you an image${content ? `: "${content.substring(0, 30)}..."` : ''}`,
+        });
+
+        const populatedNotif = await Notification.findById(notif._id).populate('sender', 'name profileImage');
+        io.to(`user:${recipientId}`).emit('notification', {
+          _id: populatedNotif._id,
+          type: 'message',
+          sender: populatedNotif.sender,
+          message: populatedNotif.message,
+          createdAt: populatedNotif.createdAt,
+          read: false,
+        });
+      } catch (notifErr) {
+        logger.warn('Image message notification failed', { error: notifErr.message });
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      data: { message },
+    });
+  } catch (error) {
+    console.error('Error sending image message:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to send image', details: error.message },
     });
   }
 });

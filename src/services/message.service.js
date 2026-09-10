@@ -25,9 +25,42 @@ class MessageService {
       });
 
       await message.save();
-      return message.populate('senderId');
+      return message.populate('senderId', 'name profileImage');
     } catch (error) {
       console.error('Error saving message:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Save a message with image to the database
+   * @param {string} senderId - ID of the user sending the message
+   * @param {string} roomId - ID of the room
+   * @param {string} content - Message content (optional)
+   * @param {string} imageUrl - URL of uploaded image
+   * @returns {Object} - Saved message object
+   */
+  async saveMessageWithImage(senderId, roomId, content, imageUrl) {
+    try {
+      if (!imageUrl) {
+        throw new Error('Image URL is required');
+      }
+
+      if (content && content.length > 5000) {
+        throw new Error('Message content cannot exceed 5000 characters');
+      }
+
+      const message = new Message({
+        senderId,
+        roomId,
+        content: content?.trim() || '',
+        imageUrl,
+      });
+
+      await message.save();
+      return message.populate('senderId');
+    } catch (error) {
+      console.error('Error saving message with image:', error);
       throw error;
     }
   }
