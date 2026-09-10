@@ -76,6 +76,7 @@ export function getNotificationUrl(type, referenceId) {
     follow: '/profile',
     like: '/feed',
     comment: '/feed',
+    doubt: '/doubts',
     doubt_answer: `/doubts/${referenceId || ''}`,
     resource: '/resources',
     community: '/community',

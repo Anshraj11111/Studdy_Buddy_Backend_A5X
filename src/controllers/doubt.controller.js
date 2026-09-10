@@ -90,6 +90,63 @@ export const createDoubt = async (req, res) => {
     // Award XP for posting a doubt
     await addXP(req.user._id, 'doubt_posted');
 
+    // Send notification to all mentors about new doubt
+    try {
+      const User = (await import('../models/User.js')).default;
+      const Notification = (await import('../models/Notification.js')).default;
+      const { getIO } = await import('../config/socket.js');
+      const { sendPushToUser } = await import('../services/webPush.service.js');
+
+      // Find all mentors
+      const mentors = await User.find({ role: 'mentor' }).select('_id').lean();
+      
+      if (mentors.length > 0) {
+        // Create notifications for all mentors
+        const notifications = mentors.map(mentor => ({
+          recipient: mentor._id,
+          sender: req.user._id,
+          type: 'doubt',
+          doubtId: doubt._id,
+          message: `New doubt posted: "${title.length > 50 ? title.substring(0, 50) + '...' : title}"`,
+          read: false,
+        }));
+
+        await Notification.insertMany(notifications);
+        
+        // Emit real-time notification to online mentors via Socket.io
+        const io = getIO();
+        mentors.forEach(mentor => {
+          io.to(mentor._id.toString()).emit('notification', {
+            type: 'doubt',
+            doubtId: doubt._id,
+            message: `New doubt: ${title.length > 50 ? title.substring(0, 50) + '...' : title}`,
+            sender: {
+              _id: req.user._id,
+              name: req.user.name,
+              profileImage: req.user.profileImage,
+            },
+          });
+        });
+
+        // Send Web Push Notifications to all mentors (even if offline/browser closed)
+        const pushPromises = mentors.map(mentor =>
+          sendPushToUser(mentor._id.toString(), {
+            title: '🆘 New Doubt Posted',
+            body: title.length > 80 ? title.substring(0, 80) + '...' : title,
+            icon: req.user.profileImage || '/icons/icon-192x192.png',
+            url: '/doubts',
+            type: 'doubt',
+          })
+        );
+        await Promise.allSettled(pushPromises);
+
+        console.log(`✅ Sent doubt notifications to ${mentors.length} mentors (in-app + push)`);
+      }
+    } catch (notifError) {
+      console.error('Error sending notifications to mentors:', notifError);
+      // Don't fail doubt creation if notifications fail
+    }
+
     // Invalidate doubts list cache
     await cache.delPattern('doubts:list:');
 
