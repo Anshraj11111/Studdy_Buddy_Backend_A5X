@@ -25,6 +25,8 @@ import paymentRoutes from './routes/payment.routes.js';
 import courseRoutes from './routes/course.routes.js';
 import referralRoutes from './routes/referral.routes.js';
 import pushRoutes from './routes/push.routes.js';
+import lectureProgressRoutes from './routes/lectureProgress.routes.js';
+import quizRoutes from './routes/quiz.routes.js';
 import { errorHandler } from './middleware/error.middleware.js';
 import { requestLogger } from './middleware/request-logger.middleware.js';
 import { sanitizeMongoOperators } from './middleware/input-sanitization.middleware.js';
@@ -404,6 +406,8 @@ app.use('/api/payments', paymentRoutes);
 app.use('/api/courses', courseRoutes);
 app.use('/api/referral', referralRoutes);
 app.use('/api/push', pushRoutes);
+app.use('/api', lectureProgressRoutes);
+app.use('/api', quizRoutes);
 
 // 404 handler
 app.use((req, res) => {

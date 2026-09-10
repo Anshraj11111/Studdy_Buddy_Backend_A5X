@@ -107,17 +107,41 @@ export const register = async (req, res) => {
  */
 export const login = async (req, res) => {
   try {
-    const { email, password, role, mentorCode } = req.body;
+    const { email, password, role, mentorCode, schoolPassword } = req.body;
 
-    // Input validation
-    if (!email || !password) {
+    // Input validation - for students, either password OR schoolPassword is required
+    if (!email) {
       return res.status(400).json({
         success: false,
         error: {
-          message: 'Please provide email and password',
+          message: 'Please provide email',
           code: 'VALIDATION_ERROR',
         },
       });
+    }
+
+    // For students: either password OR schoolPassword must be provided
+    if (role === 'student') {
+      if (!password && !schoolPassword) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            message: 'Please provide either password or school password',
+            code: 'VALIDATION_ERROR',
+          },
+        });
+      }
+    } else {
+      // For mentors: password is mandatory
+      if (!password) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            message: 'Please provide password',
+            code: 'VALIDATION_ERROR',
+          },
+        });
+      }
     }
 
     // Validate mentor code if role is mentor
@@ -134,8 +158,8 @@ export const login = async (req, res) => {
       }
     }
 
-    // Login user
-    const { user, token } = await authService.login(email, password);
+    // Login user with alternative authentication support
+    const { user, token } = await authService.login(email, password, schoolPassword);
 
     // Verify role matches if provided
     if (role && user.role !== role) {

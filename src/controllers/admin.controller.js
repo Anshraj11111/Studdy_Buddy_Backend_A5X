@@ -1338,3 +1338,187 @@ export const adminDeleteReply = async (req, res) => {
     });
   }
 };
+
+
+/**
+ * Get all quizzes (Admin Only)
+ * GET /api/admin/quizzes
+ */
+export const getAllQuizzes = async (req, res) => {
+  try {
+    const Quiz = (await import('../models/Quiz.js')).default;
+    
+    const quizzes = await Quiz.find()
+      .populate('courseId', 'title')
+      .populate('moduleId', 'title')
+      .populate('lectureId', 'title')
+      .populate('createdBy', 'name email')
+      .sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      data: { quizzes },
+    });
+  } catch (error) {
+    console.error('Error fetching quizzes:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to fetch quizzes', code: 'SERVER_ERROR' },
+    });
+  }
+};
+
+/**
+ * Create quiz (Admin Only)
+ * POST /api/admin/quizzes
+ */
+export const createQuiz = async (req, res) => {
+  try {
+    const Quiz = (await import('../models/Quiz.js')).default;
+    const { lectureId, courseId, moduleId, title, description, questions, passingScore, duration, maxAttempts } = req.body;
+
+    // Check if quiz already exists for this lecture
+    const existingQuiz = await Quiz.findOne({ lectureId });
+    if (existingQuiz) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'Quiz already exists for this lecture' },
+      });
+    }
+
+    const quiz = await Quiz.create({
+      lectureId,
+      courseId,
+      moduleId,
+      title,
+      description,
+      questions,
+      passingScore: passingScore || 60,
+      duration: duration || 0,
+      maxAttempts: maxAttempts || 3,
+      createdBy: req.user._id,
+    });
+
+    await quiz.populate('courseId', 'title');
+    await quiz.populate('moduleId', 'title');
+    await quiz.populate('lectureId', 'title');
+
+    res.status(201).json({
+      success: true,
+      data: { quiz },
+    });
+  } catch (error) {
+    console.error('Error creating quiz:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to create quiz', code: 'SERVER_ERROR' },
+    });
+  }
+};
+
+/**
+ * Update quiz (Admin Only)
+ * PUT /api/admin/quizzes/:id
+ */
+export const updateQuiz = async (req, res) => {
+  try {
+    const Quiz = (await import('../models/Quiz.js')).default;
+    const { id } = req.params;
+    const { title, description, questions, passingScore, duration, maxAttempts } = req.body;
+
+    const quiz = await Quiz.findByIdAndUpdate(
+      id,
+      {
+        title,
+        description,
+        questions,
+        passingScore,
+        duration,
+        maxAttempts,
+      },
+      { new: true, runValidators: true }
+    )
+      .populate('courseId', 'title')
+      .populate('moduleId', 'title')
+      .populate('lectureId', 'title');
+
+    if (!quiz) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'Quiz not found' },
+      });
+    }
+
+    res.json({
+      success: true,
+      data: { quiz },
+    });
+  } catch (error) {
+    console.error('Error updating quiz:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to update quiz', code: 'SERVER_ERROR' },
+    });
+  }
+};
+
+/**
+ * Delete quiz (Admin Only)
+ * DELETE /api/admin/quizzes/:id
+ */
+export const deleteQuiz = async (req, res) => {
+  try {
+    const Quiz = (await import('../models/Quiz.js')).default;
+    const { id } = req.params;
+
+    const quiz = await Quiz.findByIdAndDelete(id);
+    if (!quiz) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'Quiz not found' },
+      });
+    }
+
+    res.json({
+      success: true,
+      data: { message: 'Quiz deleted successfully' },
+    });
+  } catch (error) {
+    console.error('Error deleting quiz:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to delete quiz', code: 'SERVER_ERROR' },
+    });
+  }
+};
+
+/**
+ * Get lectures for a module (Admin Only)
+ * GET /api/admin/modules/:moduleId/lectures
+ */
+export const getModuleLectures = async (req, res) => {
+  try {
+    const Module = (await import('../models/Module.js')).default;
+    const { moduleId } = req.params;
+
+    const module = await Module.findById(moduleId).populate('resources');
+    
+    if (!module) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'Module not found' },
+      });
+    }
+
+    res.json({
+      success: true,
+      data: { lectures: module.resources || [] },
+    });
+  } catch (error) {
+    console.error('Error fetching lectures:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to fetch lectures', code: 'SERVER_ERROR' },
+    });
+  }
+};

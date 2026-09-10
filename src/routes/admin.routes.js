@@ -39,6 +39,12 @@ import {
   adminDeleteDoubt,
   adminUpdateReply,
   adminDeleteReply,
+  // Quiz Management
+  getAllQuizzes,
+  createQuiz,
+  updateQuiz,
+  deleteQuiz,
+  getModuleLectures,
 } from '../controllers/admin.controller.js';
 import { authenticate } from '../middleware/auth.middleware.js';
 
@@ -111,5 +117,12 @@ router.put('/doubts/:id', adminUpdateDoubt);
 router.delete('/doubts/:id', adminDeleteDoubt);
 router.put('/doubts/:doubtId/replies/:replyId', adminUpdateReply);
 router.delete('/doubts/:doubtId/replies/:replyId', adminDeleteReply);
+
+// Quiz management routes
+router.get('/quizzes', getAllQuizzes);
+router.post('/quizzes', createQuiz);
+router.put('/quizzes/:id', updateQuiz);
+router.delete('/quizzes/:id', deleteQuiz);
+router.get('/modules/:moduleId/lectures', getModuleLectures);
 
 export default router;

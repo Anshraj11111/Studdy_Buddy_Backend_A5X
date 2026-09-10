@@ -141,12 +141,13 @@ class AuthService {
   /**
    * Login user and generate JWT token
    * @param {string} email - User email
-   * @param {string} password - User password
+   * @param {string} password - User password (optional for students if schoolPassword provided)
+   * @param {string} schoolPassword - School password (optional alternative for students)
    * @returns {Promise<Object>} User object and JWT token
    */
-  async login(email, password) {
+  async login(email, password, schoolPassword) {
     try {
-      // Find user by email - select only needed fields (including schoolPassword for freemium check)
+      // Find user by email - select all needed fields including passwords
       const user = await User.findOne({ email })
         .select('_id name email role skills profileImage bannerImage headline bio address socialLinks education experience xp mentorCode password schoolName schoolPassword city')
         .lean();
@@ -154,10 +155,25 @@ class AuthService {
         throw new Error('Invalid credentials');
       }
 
-      // Compare password
-      const isPasswordValid = await this.comparePassword(password, user.password);
-      
-      if (!isPasswordValid) {
+      let isAuthenticated = false;
+
+      // Try personal password first (if provided)
+      if (password) {
+        const isPasswordValid = await this.comparePassword(password, user.password);
+        if (isPasswordValid) {
+          isAuthenticated = true;
+        }
+      }
+
+      // If personal password didn't work, try school password (for students only)
+      if (!isAuthenticated && schoolPassword && user.role === 'student') {
+        // Check if user has a school password stored
+        if (user.schoolPassword && user.schoolPassword === schoolPassword) {
+          isAuthenticated = true;
+        }
+      }
+
+      if (!isAuthenticated) {
         throw new Error('Invalid credentials');
       }
 
@@ -168,8 +184,9 @@ class AuthService {
         await this.autoJoinSchoolChannel(userDoc);
       }
 
-      // Remove password from response
+      // Remove passwords from response
       delete user.password;
+      delete user.schoolPassword;
 
       // Generate JWT token
       const token = this.generateToken(user._id);
