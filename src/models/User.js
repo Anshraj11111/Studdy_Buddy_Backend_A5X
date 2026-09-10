@@ -201,8 +201,10 @@ const userSchema = new mongoose.Schema(
 userSchema.methods.toJSON = function () {
   const user = this.toObject();
   delete user.password;
-  // Add hasFreeAccess flag: true if has school credentials OR isPremium
-  user.hasFreeAccess = !!(this.schoolName && this.schoolPassword) || this.isPremium;
+  // Add hasFreeAccess flag: 
+  // - Mentors always have free access
+  // - Students have free access if they have school credentials OR isPremium
+  user.hasFreeAccess = this.role === 'mentor' || !!(this.schoolName && this.schoolPassword) || this.isPremium;
   delete user.schoolPassword;
   delete user.phone;
   delete user.privateAddress;
@@ -214,8 +216,10 @@ userSchema.methods.toJSON = function () {
 userSchema.methods.toOwnerJSON = function () {
   const user = this.toObject();
   delete user.password;
-  // Add hasFreeAccess flag: true if has school credentials OR isPremium
-  user.hasFreeAccess = !!(this.schoolName && this.schoolPassword) || this.isPremium;
+  // Add hasFreeAccess flag:
+  // - Mentors always have free access
+  // - Students have free access if they have school credentials OR isPremium
+  user.hasFreeAccess = this.role === 'mentor' || !!(this.schoolName && this.schoolPassword) || this.isPremium;
   delete user.schoolPassword;
   // referralCode is always returned for owner
   return user;

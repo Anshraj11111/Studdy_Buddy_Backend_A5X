@@ -180,7 +180,18 @@ export const login = async (req, res) => {
       },
     });
   } catch (error) {
-    if (error.message === 'Invalid credentials') {
+    // Handle specific error codes from auth service
+    if (error.code === 'ACCOUNT_NOT_FOUND') {
+      return res.status(404).json({
+        success: false,
+        error: {
+          message: error.message,
+          code: 'ACCOUNT_NOT_FOUND',
+        },
+      });
+    }
+
+    if (error.code === 'INVALID_CREDENTIALS' || error.message.includes('Invalid password') || error.message.includes('Invalid school password')) {
       return res.status(401).json({
         success: false,
         error: {

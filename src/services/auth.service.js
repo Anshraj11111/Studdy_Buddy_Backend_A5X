@@ -151,8 +151,12 @@ class AuthService {
       const user = await User.findOne({ email })
         .select('_id name email role skills profileImage bannerImage headline bio address socialLinks education experience xp mentorCode password schoolName schoolPassword city')
         .lean();
+      
       if (!user) {
-        throw new Error('Invalid credentials');
+        // User doesn't exist - friendly message
+        const error = new Error('Account not found. Please create an account first.');
+        error.code = 'ACCOUNT_NOT_FOUND';
+        throw error;
       }
 
       let isAuthenticated = false;
@@ -174,7 +178,24 @@ class AuthService {
       }
 
       if (!isAuthenticated) {
-        throw new Error('Invalid credentials');
+        // Better error message based on what was provided
+        let errorMessage = 'Invalid credentials';
+        
+        if (password && !schoolPassword) {
+          errorMessage = 'Invalid password. Try using your school password if you forgot your personal password.';
+        } else if (!password && schoolPassword) {
+          if (!user.schoolPassword) {
+            errorMessage = 'No school password set for this account. Please use your personal password.';
+          } else {
+            errorMessage = 'Invalid school password. Please check and try again.';
+          }
+        } else if (password && schoolPassword) {
+          errorMessage = 'Both passwords are incorrect. Please check your credentials.';
+        }
+        
+        const error = new Error(errorMessage);
+        error.code = 'INVALID_CREDENTIALS';
+        throw error;
       }
 
       // Auto-join school channel for students (if not already joined)
@@ -187,6 +208,10 @@ class AuthService {
       // Remove passwords from response
       delete user.password;
       delete user.schoolPassword;
+
+      // Add hasFreeAccess flag for frontend
+      // Mentors always have free access, students need school credentials or premium
+      user.hasFreeAccess = user.role === 'mentor' || !!(user.schoolName && user.schoolPassword) || user.isPremium;
 
       // Generate JWT token
       const token = this.generateToken(user._id);
