@@ -14,8 +14,13 @@ router.get('/vapid-public-key', (req, res) => {
 router.post('/subscribe', authenticate, async (req, res) => {
   try {
     const { endpoint, keys } = req.body;
+    
+    console.log('[Push Subscribe] Request from user:', req.user._id);
+    console.log('[Push Subscribe] Endpoint:', endpoint?.substring(0, 50) + '...');
+    console.log('[Push Subscribe] Has keys:', !!keys?.p256dh, !!keys?.auth);
 
     if (!endpoint || !keys?.p256dh || !keys?.auth) {
+      console.log('[Push Subscribe] ❌ Invalid subscription object');
       return res.status(400).json({
         success: false,
         error: { message: 'Invalid subscription object' },
@@ -25,14 +30,17 @@ router.post('/subscribe', authenticate, async (req, res) => {
     const userAgent = req.headers['user-agent'] || '';
 
     // Upsert: update if endpoint exists, insert if new
-    await PushSubscription.findOneAndUpdate(
+    const result = await PushSubscription.findOneAndUpdate(
       { endpoint },
       { user: req.user._id, endpoint, keys, userAgent },
-      { upsert: true, returnDocument: 'after' }
+      { upsert: true, new: true }
     );
 
+    console.log('[Push Subscribe] ✅ Subscription saved:', result._id);
+    
     res.status(201).json({ success: true, data: { message: 'Subscribed to push notifications' } });
   } catch (err) {
+    console.error('[Push Subscribe] ❌ Error:', err);
     res.status(500).json({ success: false, error: { message: 'Failed to save subscription' } });
   }
 });
