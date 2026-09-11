@@ -1522,3 +1522,186 @@ export const getModuleLectures = async (req, res) => {
     });
   }
 };
+
+
+// Get all quiz attempts with student details
+export const getQuizAttempts = async (req, res) => {
+  try {
+    const { courseId, moduleId, lectureId, studentId, page = 1, limit = 50 } = req.query;
+    
+    const QuizAttempt = (await import('../models/QuizAttempt.js')).default;
+    const Quiz = (await import('../models/Quiz.js')).default;
+    const Course = (await import('../models/Course.js')).default;
+    const Module = (await import('../models/Module.js')).default;
+    const Resource = (await import('../models/Resource.js')).default;
+
+    // Build filter
+    const filter = { status: 'completed' }; // Only show completed attempts
+    if (studentId) filter.userId = studentId; // userId in model, studentId in query
+
+    // If lectureId specified, find quiz for that lecture
+    if (lectureId) {
+      const quiz = await Quiz.findOne({ lectureId }).lean();
+      if (quiz) filter.quizId = quiz._id;
+    }
+
+    // Get all attempts with populated data
+    const attempts = await QuizAttempt.find(filter)
+      .populate('userId', 'name email schoolName')
+      .populate('quizId')
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(Number(limit))
+      .lean();
+
+    // Enrich with course/module/lecture info
+    const enrichedAttempts = await Promise.all(
+      attempts.map(async (attempt) => {
+        if (!attempt.quizId) return attempt;
+
+        const quiz = attempt.quizId;
+        const [course, module, lecture] = await Promise.all([
+          Course.findById(quiz.courseId).select('title').lean(),
+          Module.findById(quiz.moduleId).select('title').lean(),
+          Resource.findById(quiz.lectureId).select('title').lean(),
+        ]);
+
+        return {
+          ...attempt,
+          studentId: attempt.userId, // Map userId to studentId for frontend
+          score: attempt.score?.percentage || 0, // Flatten score
+          course: course || null,
+          module: module || null,
+          lecture: lecture || null,
+        };
+      })
+    );
+
+    const total = await QuizAttempt.countDocuments(filter);
+
+    res.json({
+      success: true,
+      data: {
+        attempts: enrichedAttempts,
+        total,
+        page: Number(page),
+        limit: Number(limit),
+      },
+    });
+  } catch (err) {
+    console.error('Error fetching quiz attempts:', err);
+    res.status(500).json({
+      success: false,
+      error: { message: err.message || 'Failed to fetch quiz attempts' },
+    });
+  }
+};
+
+// Get detailed quiz attempt by ID
+export const getQuizAttemptDetail = async (req, res) => {
+  try {
+    const QuizAttempt = (await import('../models/QuizAttempt.js')).default;
+    const Quiz = (await import('../models/Quiz.js')).default;
+    const Course = (await import('../models/Course.js')).default;
+    const Module = (await import('../models/Module.js')).default;
+    const Resource = (await import('../models/Resource.js')).default;
+
+    const attempt = await QuizAttempt.findById(req.params.id)
+      .populate('userId', 'name email schoolName city')
+      .populate('quizId')
+      .lean();
+
+    if (!attempt) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'Quiz attempt not found' },
+      });
+    }
+
+    // Get course/module/lecture details
+    if (attempt.quizId) {
+      const quiz = attempt.quizId;
+      const [course, module, lecture] = await Promise.all([
+        Course.findById(quiz.courseId).select('title').lean(),
+        Module.findById(quiz.moduleId).select('title').lean(),
+        Resource.findById(quiz.lectureId).select('title').lean(),
+      ]);
+
+      attempt.course = course;
+      attempt.module = module;
+      attempt.lecture = lecture;
+      attempt.studentId = attempt.userId; // Map userId to studentId for frontend
+      attempt.score = attempt.score?.percentage || 0; // Flatten score for frontend
+    }
+
+    res.json({
+      success: true,
+      data: { attempt },
+    });
+  } catch (err) {
+    console.error('Error fetching quiz attempt detail:', err);
+    res.status(500).json({
+      success: false,
+      error: { message: err.message || 'Failed to fetch quiz attempt' },
+    });
+  }
+};
+
+// Get quiz statistics (pass rate, average score, etc.)
+export const getQuizStats = async (req, res) => {
+  try {
+    const QuizAttempt = (await import('../models/QuizAttempt.js')).default;
+    const Quiz = (await import('../models/Quiz.js')).default;
+
+    const { lectureId, courseId } = req.query;
+
+    // Build filter - only completed attempts
+    const filter = { status: 'completed' };
+    
+    let quizIds = [];
+    if (lectureId) {
+      const quiz = await Quiz.findOne({ lectureId }).lean();
+      if (quiz) quizIds = [quiz._id];
+    } else if (courseId) {
+      const quizzes = await Quiz.find({ courseId }).select('_id').lean();
+      quizIds = quizzes.map(q => q._id);
+    } else {
+      const quizzes = await Quiz.find().select('_id').lean();
+      quizIds = quizzes.map(q => q._id);
+    }
+
+    if (quizIds.length > 0) {
+      filter.quizId = { $in: quizIds };
+    }
+
+    // Aggregate stats
+    const [totalAttempts, passedAttempts, avgScoreResult] = await Promise.all([
+      QuizAttempt.countDocuments(filter),
+      QuizAttempt.countDocuments({ ...filter, isPassed: true }),
+      QuizAttempt.aggregate([
+        { $match: filter },
+        { $group: { _id: null, avgScore: { $avg: '$score.percentage' } } },
+      ]),
+    ]);
+
+    const avgScore = avgScoreResult[0]?.avgScore || 0;
+    const passRate = totalAttempts > 0 ? (passedAttempts / totalAttempts) * 100 : 0;
+
+    res.json({
+      success: true,
+      data: {
+        totalAttempts,
+        passedAttempts,
+        failedAttempts: totalAttempts - passedAttempts,
+        passRate: Math.round(passRate * 100) / 100,
+        avgScore: Math.round(avgScore * 100) / 100,
+      },
+    });
+  } catch (err) {
+    console.error('Error fetching quiz stats:', err);
+    res.status(500).json({
+      success: false,
+      error: { message: err.message || 'Failed to fetch quiz statistics' },
+    });
+  }
+};

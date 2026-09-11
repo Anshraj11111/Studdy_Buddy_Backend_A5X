@@ -45,6 +45,10 @@ import {
   updateQuiz,
   deleteQuiz,
   getModuleLectures,
+  // Quiz Attempts & Results
+  getQuizAttempts,
+  getQuizAttemptDetail,
+  getQuizStats,
 } from '../controllers/admin.controller.js';
 import { authenticate } from '../middleware/auth.middleware.js';
 
@@ -124,5 +128,10 @@ router.post('/quizzes', createQuiz);
 router.put('/quizzes/:id', updateQuiz);
 router.delete('/quizzes/:id', deleteQuiz);
 router.get('/modules/:moduleId/lectures', getModuleLectures);
+
+// Quiz attempts & results routes
+router.get('/quiz-attempts', getQuizAttempts);
+router.get('/quiz-attempts/:id', getQuizAttemptDetail);
+router.get('/quiz-stats', getQuizStats);
 
 export default router;

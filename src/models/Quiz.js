@@ -28,7 +28,7 @@ const questionSchema = new mongoose.Schema({
 const quizSchema = new mongoose.Schema({
   lectureId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Lecture',
+    ref: 'Resource', // Changed from 'Lecture' to 'Resource'
     required: true,
     unique: true, // One quiz per lecture
   },
