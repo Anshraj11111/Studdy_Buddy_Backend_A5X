@@ -173,5 +173,10 @@ process.on('uncaughtException', (error) => {
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (reason, promise) => {
+  // Ignore harmless network errors (client disconnects)
+  if (reason?.code === 'ECONNRESET' || reason?.code === 'EPIPE') {
+    // Client disconnected - normal behavior, no need to log
+    return;
+  }
   logger.error('Unhandled rejection', { reason, promise });
 });
