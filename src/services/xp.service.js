@@ -112,10 +112,8 @@ export const addXP = async (userId, action, override) => {
 
     let newStreak = user.streak?.current ?? 0;
 
-    if (isFirstToday) {
-      // Daily login bonus (first activity of the day)
-      streakBonus += XP_REWARDS.daily_login;
-
+    // Only apply streak logic for daily_login action
+    if (action === 'daily_login' && isFirstToday) {
       if (isConsecutive) {
         newStreak += 1;
         // Extra streak bonus every day
@@ -135,7 +133,8 @@ export const addXP = async (userId, action, override) => {
 
     // ── Build history entries ─────────────────────────────────────────────
     const historyEntries = [{ action, amount, createdAt: now }];
-    if (streakBonus > 0) {
+    // Only add streak_bonus entry for daily_login action
+    if (streakBonus > 0 && action === 'daily_login') {
       historyEntries.push({ action: 'streak_bonus', amount: streakBonus, createdAt: now });
     }
 
@@ -143,19 +142,25 @@ export const addXP = async (userId, action, override) => {
     // Use $inc for xp so concurrent calls don't overwrite each other.
     // Tokens must be recalculated after the atomic increment; we derive the
     // new token count from the document returned by findByIdAndUpdate.
+    const updateFields = {
+      $inc: { xp: totalXP },
+      $push: {
+        xpHistory: { $each: historyEntries, $slice: -200 },
+      },
+    };
+
+    // Only update streak data for daily_login action
+    if (action === 'daily_login' && isFirstToday) {
+      updateFields.$set = {
+        'streak.current':          newStreak,
+        'streak.longest':          Math.max(newStreak, user.streak?.longest ?? 0),
+        'streak.lastActivityDate': now,
+      };
+    }
+
     const updated = await User.findByIdAndUpdate(
       userId,
-      {
-        $inc: { xp: totalXP },
-        $set: {
-          'streak.current':          newStreak,
-          'streak.longest':          Math.max(newStreak, user.streak?.longest ?? 0),
-          'streak.lastActivityDate': isFirstToday ? now : user.streak?.lastActivityDate,
-        },
-        $push: {
-          xpHistory: { $each: historyEntries, $slice: -200 },
-        },
-      },
+      updateFields,
       { new: true, select: 'xp' }, // return updated doc to recalculate tokens
     );
 

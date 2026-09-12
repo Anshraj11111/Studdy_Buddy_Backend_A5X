@@ -172,6 +172,15 @@ export const login = async (req, res) => {
       });
     }
 
+    // Award daily login XP (automatic streak tracking happens in addXP)
+    try {
+      const { addXP } = await import('../services/xp.service.js');
+      await addXP(user._id, 'daily_login');
+    } catch (xpError) {
+      console.error('Failed to award daily login XP:', xpError);
+      // Don't fail the login if XP update fails
+    }
+
     res.status(200).json({
       success: true,
       data: {
