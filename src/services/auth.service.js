@@ -37,8 +37,9 @@ class AuthService {
         });
 
         if (preRegistered) {
-          // Admin ne pre-register kiya hai - validate password
-          if (preRegistered.schoolPassword !== schoolPassword) {
+          // Admin ne pre-register kiya hai - validate password (hashed)
+          const isSchoolPasswordValid = await this.comparePassword(schoolPassword, preRegistered.schoolPassword);
+          if (!isSchoolPasswordValid) {
             throw new Error('Invalid school password');
           }
           
@@ -55,8 +56,9 @@ class AuthService {
           });
 
           if (existingStudent) {
-            // School already has students - verify password matches
-            if (existingStudent.schoolPassword !== schoolPassword) {
+            // School already has students - verify password matches (hashed)
+            const isSchoolPasswordValid = await this.comparePassword(schoolPassword, existingStudent.schoolPassword);
+            if (!isSchoolPasswordValid) {
               throw new Error('Invalid school password');
             }
           }
@@ -65,6 +67,9 @@ class AuthService {
 
       // Hash password
       const hashedPassword = await this.hashPassword(password);
+      
+      // Hash school password if provided
+      const hashedSchoolPassword = schoolPassword ? await this.hashPassword(schoolPassword) : '';
 
       // Create user
       const user = await User.create({
@@ -75,7 +80,7 @@ class AuthService {
         skills: skills || [],
         mentorCode: mentorCode || null,
         schoolName: schoolName || '',
-        schoolPassword: schoolPassword || '',
+        schoolPassword: hashedSchoolPassword,
         city: city || '',
         referralCode: generateReferralCode(name),
       });
@@ -171,9 +176,12 @@ class AuthService {
 
       // If personal password didn't work, try school password (for students only)
       if (!isAuthenticated && schoolPassword && user.role === 'student') {
-        // Check if user has a school password stored
-        if (user.schoolPassword && user.schoolPassword === schoolPassword) {
-          isAuthenticated = true;
+        // Check if user has a school password stored (hashed)
+        if (user.schoolPassword) {
+          const isSchoolPasswordValid = await this.comparePassword(schoolPassword, user.schoolPassword);
+          if (isSchoolPasswordValid) {
+            isAuthenticated = true;
+          }
         }
       }
 

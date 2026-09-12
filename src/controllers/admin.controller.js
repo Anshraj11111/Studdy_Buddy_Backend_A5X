@@ -74,11 +74,52 @@ export const toggleUserActive = async (req, res) => {
 };
 
 export const deleteUser = async (req, res) => {
+  const { logAdminAction } = await import('../utils/adminAudit.js');
+  
   try {
     const user = await User.findByIdAndDelete(req.params.id);
-    if (!user) return res.status(404).json({ success: false, error: { message: 'User not found' } });
+    
+    if (!user) {
+      await logAdminAction({
+        action: 'user_delete',
+        adminSecret: req.headers['x-admin-secret'],
+        targetId: req.params.id,
+        targetType: 'user',
+        req,
+        success: false,
+        errorMessage: 'User not found',
+      });
+      
+      return res.status(404).json({ success: false, error: { message: 'User not found' } });
+    }
+    
+    // Log successful deletion
+    await logAdminAction({
+      action: 'user_delete',
+      adminSecret: req.headers['x-admin-secret'],
+      targetId: user._id,
+      targetType: 'user',
+      details: {
+        userName: user.name,
+        userEmail: user.email,
+        userRole: user.role,
+      },
+      req,
+      success: true,
+    });
+    
     res.json({ success: true, data: { message: 'User deleted' } });
   } catch (err) {
+    await logAdminAction({
+      action: 'user_delete',
+      adminSecret: req.headers['x-admin-secret'],
+      targetId: req.params.id,
+      targetType: 'user',
+      req,
+      success: false,
+      errorMessage: err.message,
+    });
+    
     res.status(500).json({ success: false, error: { message: err.message } });
   }
 };

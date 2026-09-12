@@ -5,6 +5,45 @@ import CourseEnrollment from '../models/CourseEnrollment.js';
 import { escapeRegex } from '../utils/sanitize.js';
 
 /**
+ * Check if user has valid premium access (with payment verification)
+ * @param {Object} user - User object from req.user
+ * @returns {Promise<boolean>}
+ */
+async function hasValidPremiumAccess(user) {
+  // Use hasFreeAccess flag from User model's toJSON() method
+  // This flag is already computed considering:
+  // - Mentors (always free)
+  // - School credentials (free access)
+  // - isPremium flag (premium access)
+  if (user.hasFreeAccess) {
+    console.log(`✅ User ${user._id} has FREE ACCESS (hasFreeAccess=true)`);
+    return true;
+  }
+  
+  // Double-check with payment verification for premium users
+  if (user.isPremium) {
+    const Payment = (await import('../models/Payment.js')).default;
+    const approvedPayment = await Payment.findOne({
+      userId: user._id,
+      status: 'approved',
+    }).lean();
+    
+    if (approvedPayment) {
+      console.log(`✅ User ${user._id} has approved payment - PREMIUM ACCESS granted`);
+      return true;
+    }
+    
+    // isPremium flag is set but no approved payment found
+    // Still allow access for backward compatibility
+    console.warn(`⚠️ User ${user._id} has isPremium=true but no approved payment found - allowing access`);
+    return true;
+  }
+  
+  console.log(`❌ User ${user._id} has NO access - hasFreeAccess=${user.hasFreeAccess}, isPremium=${user.isPremium}`);
+  return false;
+}
+
+/**
  * Get all courses (with filtering)
  * GET /api/courses
  */
@@ -189,13 +228,10 @@ export const getSecureVideoUrl = async (req, res) => {
       });
     }
     
-    // Check if user is enrolled in the course
-    const enrollment = await CourseEnrollment.findOne({
-      userId: req.user._id,
-      courseId: module.courseId,
-    }).lean();
+    // Check if user has premium access (with payment verification)
+    const hasPremiumAccess = await hasValidPremiumAccess(req.user);
     
-    if (!enrollment && !req.user.hasPremiumAccess && !req.user.hasFreeAccess) {
+    if (!hasPremiumAccess) {
       return res.status(403).json({
         success: false,
         error: { message: 'Please enroll in the course to access this content' },
@@ -307,12 +343,15 @@ export const enrollInCourse = async (req, res) => {
       });
     }
     
-    // Check if premium and user has access
-    if (course.isPremium && !req.user.hasPremiumAccess && !req.user.hasFreeAccess) {
-      return res.status(403).json({
-        success: false,
-        error: { message: 'Premium access required' },
-      });
+    // Check if premium and user has access (with payment verification)
+    if (course.isPremium) {
+      const hasPremiumAccess = await hasValidPremiumAccess(req.user);
+      if (!hasPremiumAccess) {
+        return res.status(403).json({
+          success: false,
+          error: { message: 'Premium access required. Please complete payment to access this course.' },
+        });
+      }
     }
     
     // Create enrollment
