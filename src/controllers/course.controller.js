@@ -238,6 +238,12 @@ export const getSecureVideoUrl = async (req, res) => {
       });
     }
     
+    // ✅ Increment view count for this lecture (only on successful access)
+    await Resource.findByIdAndUpdate(lectureId, {
+      $inc: { viewCount: 1 }
+    });
+    console.log(`📊 View count incremented for lecture: ${lectureId}`);
+    
     // Generate a short-lived token (90 seconds) instead of returning URL directly
     const { generateVideoToken } = await import('../utils/videoToken.js');
     const token = generateVideoToken(String(lectureId), String(req.user._id));

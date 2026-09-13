@@ -79,6 +79,11 @@ const resourceSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    viewCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
   },
   { timestamps: true }
 );
