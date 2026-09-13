@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { getConnection } from '../config/db-multi.js';
 
 const feedPostSchema = new mongoose.Schema(
   {
@@ -36,4 +37,14 @@ const feedPostSchema = new mongoose.Schema(
 feedPostSchema.index({ category: 1, createdAt: -1 });
 feedPostSchema.index({ userId: 1, createdAt: -1 });
 
-export default mongoose.model('FeedPost', feedPostSchema);
+// FeedPosts are stored in PRIMARY database (with User data)
+let FeedPost;
+try {
+  const conn = getConnection('primary');
+  FeedPost = conn.model('FeedPost', feedPostSchema);
+} catch (error) {
+  console.warn('⚠️ FeedPost model: Using default mongoose connection');
+  FeedPost = mongoose.model('FeedPost', feedPostSchema);
+}
+
+export default FeedPost;

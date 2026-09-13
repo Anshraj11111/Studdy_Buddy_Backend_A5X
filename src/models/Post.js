@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { getConnection } from '../config/db-multi.js';
 
 const postSchema = new mongoose.Schema(
   {
@@ -53,4 +54,14 @@ const postSchema = new mongoose.Schema(
 postSchema.index({ communityId: 1, createdAt: -1 });
 postSchema.index({ userId: 1 });
 
-export default mongoose.model('Post', postSchema);
+// Posts are stored in SECONDARY database (model-registry.js says 'secondary')
+let Post;
+try {
+  const conn = getConnection('secondary');
+  Post = conn.model('Post', postSchema);
+} catch (error) {
+  console.warn('⚠️ Post model: Using default mongoose connection');
+  Post = mongoose.model('Post', postSchema);
+}
+
+export default Post;
