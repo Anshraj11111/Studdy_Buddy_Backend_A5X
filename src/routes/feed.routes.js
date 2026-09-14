@@ -18,6 +18,38 @@ const emitNotification = (io, userId, notification) => {
   }
 };
 
+// GET /api/feed/liked - Get posts liked by current user
+router.get('/liked', authenticate, async (req, res) => {
+  try {
+    const { page = 1, limit = 20 } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const userId = req.user._id;
+
+    // Find posts where user's ID is in the likes array
+    const posts = await FeedPost.find({
+      likes: userId
+    })
+      .populate('userId', 'name profileImage role skills')
+      .populate('comments.userId', 'name profileImage')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    const total = await FeedPost.countDocuments({ likes: userId });
+
+    res.json({
+      success: true,
+      data: {
+        posts,
+        pagination: { page: parseInt(page), limit: parseInt(limit), total },
+      },
+    });
+  } catch (err) {
+    console.error('Failed to fetch liked posts:', err);
+    res.status(500).json({ success: false, error: { message: 'Failed to fetch liked posts' } });
+  }
+});
+
 // GET /api/feed?category=Robotics&page=1&limit=20
 router.get('/', authenticate, async (req, res) => {
   try {
