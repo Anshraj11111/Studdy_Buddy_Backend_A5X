@@ -121,6 +121,13 @@ router.delete('/:id', authenticate, async (req, res) => {
       return res.status(403).json({ success: false, error: { message: 'Not authorized' } });
     }
     await post.deleteOne();
+    
+    // 🔥 IMPORTANT: Invalidate feed cache after post deleted
+    await deleteCache('feed:*').catch(err => {
+      console.error('⚠️ Failed to invalidate feed cache:', err);
+    });
+    console.log('✅ Feed cache invalidated after post deleted');
+    
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, error: { message: 'Failed to delete post' } });
@@ -214,6 +221,13 @@ router.post('/:id/like', authenticate, async (req, res) => {
     }
     await post.save();
 
+    // 🔥 IMPORTANT: Invalidate ALL feed cache when a like is added/removed
+    // This ensures that when user refreshes page, they get updated like counts
+    await deleteCache('feed:*').catch(err => {
+      console.error('⚠️ Failed to invalidate feed cache:', err);
+    });
+    console.log('✅ Feed cache invalidated after like toggle');
+
     res.json({ success: true, data: { liked: !liked, likeCount: post.likes.length } });
   } catch (err) {
     res.status(500).json({ success: false, error: { message: 'Failed to toggle like' } });
@@ -245,6 +259,12 @@ router.post('/:id/comment', authenticate, async (req, res) => {
 
     post.comments.push({ userId: req.user._id, content: content.trim() });
     await post.save();
+
+    // 🔥 IMPORTANT: Invalidate feed cache after comment added
+    await deleteCache('feed:*').catch(err => {
+      console.error('⚠️ Failed to invalidate feed cache:', err);
+    });
+    console.log('✅ Feed cache invalidated after comment added');
 
     // XP for commenter + post owner
     await addXP(String(req.user._id), 'comment');
