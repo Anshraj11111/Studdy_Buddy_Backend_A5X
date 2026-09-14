@@ -31,6 +31,7 @@ router.get('/liked', authenticate, async (req, res) => {
     })
       .populate('userId', 'name profileImage role skills')
       .populate('comments.userId', 'name profileImage')
+      .populate('comments.replies.userId', 'name profileImage')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
@@ -74,6 +75,7 @@ router.get('/', authenticate, async (req, res) => {
     const posts = await FeedPost.find(query)
       .populate('userId', 'name profileImage role skills')
       .populate('comments.userId', 'name profileImage')
+      .populate('comments.replies.userId', 'name profileImage')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
@@ -201,7 +203,8 @@ router.put('/:id', authenticate, async (req, res) => {
 
     const populated = await FeedPost.findById(post._id)
       .populate('userId', 'name profileImage role skills')
-      .populate('comments.userId', 'name profileImage');
+      .populate('comments.userId', 'name profileImage')
+      .populate('comments.replies.userId', 'name profileImage');
 
     // Invalidate cache
     deleteCache('feed:*').catch(() => {});
@@ -328,7 +331,8 @@ router.post('/:id/comment', authenticate, async (req, res) => {
 
     const populatedPost = await FeedPost.findById(post._id)
       .populate('userId', 'name profileImage role')
-      .populate('comments.userId', 'name profileImage');
+      .populate('comments.userId', 'name profileImage')
+      .populate('comments.replies.userId', 'name profileImage');
 
     res.status(201).json({ success: true, data: { post: populatedPost } });
   } catch (err) {
@@ -372,7 +376,8 @@ router.put('/:postId/comment/:commentId', authenticate, async (req, res) => {
 
     const populatedPost = await FeedPost.findById(post._id)
       .populate('userId', 'name profileImage role')
-      .populate('comments.userId', 'name profileImage');
+      .populate('comments.userId', 'name profileImage')
+      .populate('comments.replies.userId', 'name profileImage');
 
     res.status(200).json({ success: true, data: { post: populatedPost } });
   } catch (err) {
@@ -403,12 +408,126 @@ router.delete('/:postId/comment/:commentId', authenticate, async (req, res) => {
 
     const populatedPost = await FeedPost.findById(post._id)
       .populate('userId', 'name profileImage role')
-      .populate('comments.userId', 'name profileImage');
+      .populate('comments.userId', 'name profileImage')
+      .populate('comments.replies.userId', 'name profileImage');
 
     res.status(200).json({ success: true, data: { post: populatedPost } });
   } catch (err) {
     console.error('Delete comment error:', err);
     res.status(500).json({ success: false, error: { message: 'Failed to delete comment' } });
+  }
+});
+
+// POST /api/feed/:postId/comment/:commentId/reply - Add reply to a comment
+router.post('/:postId/comment/:commentId/reply', authenticate, async (req, res) => {
+  try {
+    const { content } = req.body;
+    if (!content?.trim()) {
+      return res.status(400).json({ success: false, error: { message: 'Reply cannot be empty' } });
+    }
+
+    const post = await FeedPost.findById(req.params.postId);
+    if (!post) return res.status(404).json({ success: false, error: { message: 'Post not found' } });
+
+    const comment = post.comments.id(req.params.commentId);
+    if (!comment) return res.status(404).json({ success: false, error: { message: 'Comment not found' } });
+
+    // Initialize replies array if it doesn't exist
+    if (!comment.replies) comment.replies = [];
+
+    // Add reply to comment
+    comment.replies.push({ 
+      userId: req.user._id, 
+      content: content.trim(),
+      createdAt: new Date()
+    });
+    await post.save();
+
+    // Invalidate cache
+    await deleteCache('feed:*').catch(err => {
+      console.error('⚠️ Failed to invalidate feed cache:', err);
+    });
+
+    // XP for replier + comment owner
+    await addXP(String(req.user._id), 'comment');
+    if (String(comment.userId) !== String(req.user._id)) {
+      await addXP(String(comment.userId), 'comment_received');
+
+      // Send notification to comment owner
+      const notif = await Notification.create({
+        recipient: comment.userId,
+        sender: req.user._id,
+        type: 'reply',
+        postId: post._id,
+        message: `${req.user.name} replied to your comment`,
+      });
+      const populated = await Notification.findById(notif._id).populate('sender', 'name profileImage');
+      
+      // Emit notification via socket
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`user:${comment.userId}`).emit('notification', populated);
+      }
+
+      sendPushToUser(String(comment.userId), {
+        title: 'Studdy Buddy',
+        body: `${req.user.name} replied to your comment`,
+        icon: req.user.profileImage || '/icons/icon-192x192.png',
+        url: '/feed',
+        type: 'reply',
+      });
+    }
+
+    const populatedPost = await FeedPost.findById(post._id)
+      .populate('userId', 'name profileImage role')
+      .populate('comments.userId', 'name profileImage')
+      .populate('comments.replies.userId', 'name profileImage');
+
+    res.status(201).json({ success: true, data: { post: populatedPost } });
+  } catch (err) {
+    console.error('Add reply error:', err);
+    res.status(500).json({ success: false, error: { message: 'Failed to add reply' } });
+  }
+});
+
+// DELETE /api/feed/:postId/comment/:commentId/reply/:replyId - Delete reply
+router.delete('/:postId/comment/:commentId/reply/:replyId', authenticate, async (req, res) => {
+  try {
+    const post = await FeedPost.findById(req.params.postId);
+    if (!post) return res.status(404).json({ success: false, error: { message: 'Post not found' } });
+
+    const comment = post.comments.id(req.params.commentId);
+    if (!comment) return res.status(404).json({ success: false, error: { message: 'Comment not found' } });
+
+    const reply = comment.replies.id(req.params.replyId);
+    if (!reply) return res.status(404).json({ success: false, error: { message: 'Reply not found' } });
+
+    // Check if user owns the reply, comment, or post
+    const isReplyOwner = String(reply.userId) === String(req.user._id);
+    const isCommentOwner = String(comment.userId) === String(req.user._id);
+    const isPostOwner = String(post.userId) === String(req.user._id);
+
+    if (!isReplyOwner && !isCommentOwner && !isPostOwner) {
+      return res.status(403).json({ success: false, error: { message: 'Not authorized to delete this reply' } });
+    }
+
+    comment.replies.pull(req.params.replyId);
+    await post.save();
+
+    // Invalidate cache
+    await deleteCache('feed:*').catch(err => {
+      console.error('⚠️ Failed to invalidate feed cache:', err);
+    });
+
+    const populatedPost = await FeedPost.findById(post._id)
+      .populate('userId', 'name profileImage role')
+      .populate('comments.userId', 'name profileImage')
+      .populate('comments.replies.userId', 'name profileImage');
+
+    res.status(200).json({ success: true, data: { post: populatedPost } });
+  } catch (err) {
+    console.error('Delete reply error:', err);
+    res.status(500).json({ success: false, error: { message: 'Failed to delete reply' } });
   }
 });
 

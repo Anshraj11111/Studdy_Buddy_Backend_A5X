@@ -28,6 +28,13 @@ const feedPostSchema = new mongoose.Schema(
         userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
         content: { type: String, maxlength: 1000 },
         createdAt: { type: Date, default: Date.now },
+        replies: [
+          {
+            userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+            content: { type: String, maxlength: 1000 },
+            createdAt: { type: Date, default: Date.now },
+          },
+        ],
       },
     ],
   },
