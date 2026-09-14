@@ -146,7 +146,7 @@ export const getCourseById = async (req, res) => {
 };
 
 /**
- * Get module lectures
+ * Get module lectures (with completion status, progress tracking, and quiz info)
  * GET /api/modules/:id/lectures
  */
 export const getModuleLectures = async (req, res) => {
@@ -167,21 +167,121 @@ export const getModuleLectures = async (req, res) => {
       .sort({ order: 1 })
       .lean();
     
-    // Check completion status if user is authenticated
+    // Check completion status, progress, and quiz availability if user is authenticated
     if (req.user) {
+      const userId = req.user._id;
+      
+      // Get enrollment status
       const enrollment = await CourseEnrollment.findOne({
-        userId: req.user._id,
+        userId,
         courseId: module.courseId,
       }).lean();
       
-      if (enrollment) {
-        const completedSet = new Set(
-          enrollment.completedVideos.map(v => v.toString())
-        );
-        resources.forEach(resource => {
-          resource.completed = completedSet.has(resource._id.toString());
-        });
-      }
+      // Get lecture progress for all lectures in this module
+      const LectureProgress = (await import('../models/LectureProgress.js')).default;
+      const progressRecords = await LectureProgress.find({
+        userId,
+        moduleId: req.params.id,
+      }).lean();
+      
+      // Create a map of progress by lectureId
+      const progressMap = new Map();
+      progressRecords.forEach(p => {
+        progressMap.set(p.lectureId.toString(), p);
+      });
+      
+      // Get quiz availability for all lectures
+      const Quiz = (await import('../models/Quiz.js')).default;
+      const QuizAttempt = (await import('../models/QuizAttempt.js')).default;
+      const lectureIds = resources.map(r => r._id);
+      const quizzes = await Quiz.find({ 
+        lectureId: { $in: lectureIds },
+        isActive: true 
+      }).lean();
+      
+      // Create a map of quizzes by lectureId
+      const quizMap = new Map();
+      quizzes.forEach(q => {
+        quizMap.set(q.lectureId.toString(), q);
+      });
+      
+      // Get quiz attempts for user
+      const quizAttempts = await QuizAttempt.find({
+        userId,
+        lectureId: { $in: lectureIds },
+        status: 'completed'
+      }).lean();
+      
+      // Create a map of best attempts by lectureId
+      const attemptMap = new Map();
+      quizAttempts.forEach(attempt => {
+        const lectureIdStr = attempt.lectureId.toString();
+        const existing = attemptMap.get(lectureIdStr);
+        if (!existing || attempt.score.percentage > existing.score.percentage) {
+          attemptMap.set(lectureIdStr, attempt);
+        }
+      });
+      
+      // Enrich resources with progress and quiz info
+      const completedSet = enrollment 
+        ? new Set(enrollment.completedVideos.map(v => v.toString()))
+        : new Set();
+        
+      resources.forEach(resource => {
+        const resourceIdStr = resource._id.toString();
+        const progress = progressMap.get(resourceIdStr);
+        const quiz = quizMap.get(resourceIdStr);
+        const bestAttempt = attemptMap.get(resourceIdStr);
+        
+        // Legacy completion status
+        resource.completed = completedSet.has(resourceIdStr);
+        
+        // New progress tracking
+        resource.progress = progress ? {
+          watchedPercentage: progress.watchedPercentage,
+          isCompleted: progress.isCompleted,
+          lastWatchedAt: progress.lastWatchedAt,
+          completedAt: progress.completedAt,
+        } : {
+          watchedPercentage: 0,
+          isCompleted: false,
+          lastWatchedAt: null,
+          completedAt: null,
+        };
+        
+        // Quiz information
+        resource.quiz = quiz ? {
+          hasQuiz: true,
+          quizId: quiz._id,
+          isUnlocked: progress?.isCompleted || false, // Quiz unlocks after lecture completion
+          questionCount: quiz.questions.length,
+          passingScore: quiz.passingScore,
+          maxAttempts: quiz.maxAttempts,
+          attemptCount: quizAttempts.filter(a => a.lectureId.toString() === resourceIdStr).length,
+          bestScore: bestAttempt ? bestAttempt.score.percentage : null,
+          isPassed: bestAttempt ? bestAttempt.isPassed : false,
+        } : {
+          hasQuiz: false,
+          quizId: null,
+          isUnlocked: false,
+        };
+      });
+    } else {
+      // For unauthenticated users, add default values
+      resources.forEach(resource => {
+        resource.completed = false;
+        resource.progress = {
+          watchedPercentage: 0,
+          isCompleted: false,
+          lastWatchedAt: null,
+          completedAt: null,
+        };
+        resource.quiz = {
+          hasQuiz: false,
+          quizId: null,
+          isUnlocked: false,
+        };
+      });
     }
     
     module.resources = resources;
