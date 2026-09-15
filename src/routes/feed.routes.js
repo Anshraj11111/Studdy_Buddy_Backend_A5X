@@ -450,8 +450,15 @@ router.post('/:id/poll/vote', authenticate, pollVoteLimiter, async (req, res) =>
 
     res.json({ success: true, data: { poll: post.poll } });
   } catch (err) {
-    console.error('Poll vote error:', err);
-    res.status(500).json({ success: false, error: { message: 'Failed to vote on poll' } });
+    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.error('❌ POLL VOTE ERROR:');
+    console.error('Post ID:', req.params.id);
+    console.error('Option Index:', req.body.optionIndex);
+    console.error('User ID:', req.user._id);
+    console.error('Error:', err);
+    console.error('Stack:', err.stack);
+    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    res.status(500).json({ success: false, error: { message: 'Failed to vote on poll', details: err.message } });
   }
 });
 
