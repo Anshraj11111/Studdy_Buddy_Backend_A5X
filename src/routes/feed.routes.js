@@ -72,13 +72,36 @@ router.get('/', authenticate, async (req, res) => {
       query.userId = userId;
     }
 
-    const posts = await FeedPost.find(query)
+    // Fetch more posts than needed for randomization
+    const fetchLimit = parseInt(limit) * 3; // Fetch 3x more posts
+    const allPosts = await FeedPost.find(query)
       .populate('userId', 'name profileImage role skills')
       .populate('comments.userId', 'name profileImage')
       .populate('comments.replies.userId', 'name profileImage')
       .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(parseInt(limit));
+      .limit(fetchLimit);
+
+    // Separate recent (last 7 days) and older posts
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const recentPosts = allPosts.filter(post => post.createdAt >= sevenDaysAgo);
+    const olderPosts = allPosts.filter(post => post.createdAt < sevenDaysAgo);
+
+    // Shuffle recent posts for randomness
+    const shuffleArray = (array) => {
+      const shuffled = [...array];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      return shuffled;
+    };
+
+    // Mix: 70% recent shuffled + 30% older (chronological)
+    const shuffledRecent = shuffleArray(recentPosts);
+    const mixedPosts = [...shuffledRecent, ...olderPosts];
+
+    // Apply pagination on mixed results
+    const posts = mixedPosts.slice(skip, skip + parseInt(limit));
 
     const total = await FeedPost.countDocuments(query);
 
@@ -91,9 +114,10 @@ router.get('/', authenticate, async (req, res) => {
     };
 
     // Only cache non-search requests (search results less likely to be reused)
-    if (!search.trim()) {
-      await setCache(cacheKey, response, 120); // 2 min TTL
-    }
+    // Disable cache for randomized feed to ensure fresh shuffle on each request
+    // if (!search.trim()) {
+    //   await setCache(cacheKey, response, 120); // 2 min TTL
+    // }
 
     res.json(response);
   } catch (err) {
