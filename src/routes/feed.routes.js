@@ -1,5 +1,6 @@
 import express from 'express';
 import FeedPost from '../models/FeedPost.js';
+import User from '../models/User.js';
 import Notification from '../models/Notification.js';
 import authMiddleware from '../middleware/auth.middleware.js';
 import { addXP } from '../services/xp.service.js';
@@ -17,6 +18,33 @@ const emitNotification = (io, userId, notification) => {
     io.to(`user:${userId}`).emit('notification', notification);
   }
 };
+
+// GET /api/feed/users/search?q=john - Search users for mentions
+router.get('/users/search', authenticate, async (req, res) => {
+  try {
+    const { q } = req.query;
+    if (!q || q.trim().length < 2) {
+      return res.json({ success: true, data: { users: [] } });
+    }
+
+    const searchTerm = escapeRegex(q.trim());
+    const users = await User.find({
+      $or: [
+        { name: { $regex: searchTerm, $options: 'i' } },
+        { email: { $regex: searchTerm, $options: 'i' } }
+      ],
+      _id: { $ne: req.user._id } // Exclude current user
+    })
+      .select('_id name email profileImage role')
+      .limit(10)
+      .lean();
+
+    res.json({ success: true, data: { users } });
+  } catch (err) {
+    console.error('User search failed:', err);
+    res.status(500).json({ success: false, error: { message: 'Failed to search users' } });
+  }
+});
 
 // GET /api/feed/liked - Get posts liked by current user
 router.get('/liked', authenticate, async (req, res) => {
@@ -128,7 +156,7 @@ router.get('/', authenticate, async (req, res) => {
 // POST /api/feed
 router.post('/', authenticate, async (req, res) => {
   try {
-    const { content, category = 'All', mediaUrl, mediaType } = req.body;
+    const { content, category = 'All', mediaUrl, mediaType, mentions = [] } = req.body;
     if (!content?.trim() && !mediaUrl) {
       return res.status(400).json({ success: false, error: { message: 'Content or media is required' } });
     }
@@ -153,13 +181,52 @@ router.post('/', authenticate, async (req, res) => {
       category,
       mediaUrl: mediaUrl || null,
       mediaType: mediaType || null,
+      mentions: mentions || [],
     });
 
     const populated = await FeedPost.findById(post._id)
-      .populate('userId', 'name profileImage role skills');
+      .populate('userId', 'name profileImage role skills')
+      .populate('mentions', 'name profileImage role');
 
     // Award XP for creating a feed post
     await addXP(req.user._id, 'post');
+
+    // Send notifications to mentioned users
+    const io = req.app.get('io');
+    if (mentions && mentions.length > 0) {
+      for (const mentionedUserId of mentions) {
+        if (String(mentionedUserId) !== String(req.user._id)) {
+          try {
+            const notification = await Notification.create({
+              userId: mentionedUserId,
+              type: 'mention',
+              message: `${req.user.name} mentioned you in a post`,
+              relatedId: post._id,
+              relatedModel: 'FeedPost',
+            });
+
+            // Populate notification
+            await notification.populate('userId', 'name profileImage');
+
+            // Emit socket notification
+            emitNotification(io, mentionedUserId, notification);
+
+            // Send push notification
+            try {
+              await sendPushToUser(mentionedUserId, {
+                title: 'New Mention',
+                body: `${req.user.name} mentioned you in a post`,
+                url: `/communities?postId=${post._id}`,
+              });
+            } catch (pushErr) {
+              console.error('Push notification failed for mention:', pushErr);
+            }
+          } catch (notifErr) {
+            console.error('Failed to create mention notification:', notifErr);
+          }
+        }
+      }
+    }
 
     // Invalidate feed cache so new post shows immediately
     deleteCache('feed:*').catch(() => {});

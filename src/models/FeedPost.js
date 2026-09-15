@@ -14,6 +14,10 @@ const feedPostSchema = new mongoose.Schema(
       required: true,
       maxlength: 7000,
     },
+    mentions: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+    }],
     category: {
       type: String,
       enum: ['All', 'Robotics', 'IoT', 'Embedded Systems', 'AI/ML', 'Projects', 'Mentorship'],
