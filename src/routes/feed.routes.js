@@ -46,6 +46,30 @@ router.get('/users/search', authenticate, async (req, res) => {
   }
 });
 
+// GET /api/feed/hashtags/trending - Get trending hashtags
+router.get('/hashtags/trending', authenticate, async (req, res) => {
+  try {
+    const { limit = 20 } = req.query;
+    
+    // Aggregate hashtags from recent posts (last 30 days)
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    
+    const trending = await FeedPost.aggregate([
+      { $match: { createdAt: { $gte: thirtyDaysAgo } } },
+      { $unwind: '$hashtags' },
+      { $group: { _id: '$hashtags', count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: parseInt(limit) },
+      { $project: { tag: '$_id', count: 1, _id: 0 } }
+    ]);
+
+    res.json({ success: true, data: { hashtags: trending } });
+  } catch (err) {
+    console.error('Failed to fetch trending hashtags:', err);
+    res.status(500).json({ success: false, error: { message: 'Failed to fetch hashtags' } });
+  }
+});
+
 // GET /api/feed/liked - Get posts liked by current user
 router.get('/liked', authenticate, async (req, res) => {
   try {
@@ -79,14 +103,14 @@ router.get('/liked', authenticate, async (req, res) => {
   }
 });
 
-// GET /api/feed?category=Robotics&page=1&limit=20
+// GET /api/feed?category=Robotics&page=1&limit=20&hashtag=ai
 router.get('/', authenticate, async (req, res) => {
   try {
-    const { category, page = 1, limit = 20, search = '', userId } = req.query;
+    const { category, page = 1, limit = 20, search = '', userId, hashtag } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     // Cache key — TTL 2 min (feed changes frequently)
-    const cacheKey = `feed:${category || 'All'}:${page}:${limit}:${search.trim()}:${userId || ''}`;
+    const cacheKey = `feed:${category || 'All'}:${page}:${limit}:${search.trim()}:${userId || ''}:${hashtag || ''}`;
     const cached = await getCache(cacheKey);
     if (cached) return res.json(cached);
 
@@ -94,6 +118,10 @@ router.get('/', authenticate, async (req, res) => {
     if (category && category !== 'All') query.category = category;
     if (search.trim()) {
       query.content = { $regex: escapeRegex(search.trim()), $options: 'i' };
+    }
+    // Filter by hashtag
+    if (hashtag) {
+      query.hashtags = hashtag.toLowerCase().replace('#', '');
     }
     // Filter by specific user if userId provided
     if (userId) {
@@ -156,9 +184,9 @@ router.get('/', authenticate, async (req, res) => {
 // POST /api/feed
 router.post('/', authenticate, async (req, res) => {
   try {
-    const { content, category = 'All', mediaUrl, mediaType, mentions = [] } = req.body;
-    if (!content?.trim() && !mediaUrl) {
-      return res.status(400).json({ success: false, error: { message: 'Content or media is required' } });
+    const { content, category = 'All', mediaUrl, mediaType, mentions = [], poll } = req.body;
+    if (!content?.trim() && !mediaUrl && !poll) {
+      return res.status(400).json({ success: false, error: { message: 'Content, media, or poll is required' } });
     }
 
     // Content moderation - block abusive words in post content
@@ -175,6 +203,23 @@ router.post('/', authenticate, async (req, res) => {
       }
     }
 
+    // Extract hashtags from content (#robotics, #ai, etc.)
+    const hashtagRegex = /#(\w+)/g;
+    const hashtagMatches = content?.match(hashtagRegex) || [];
+    const hashtags = [...new Set(hashtagMatches.map(tag => tag.slice(1).toLowerCase()))]; // Remove # and dedupe
+
+    // Prepare poll data if provided
+    let pollData = null;
+    if (poll && poll.question && poll.options && poll.options.length >= 2) {
+      const expiresAt = new Date(Date.now() + (poll.duration || 24) * 60 * 60 * 1000);
+      pollData = {
+        question: poll.question.trim(),
+        options: poll.options.map(opt => ({ text: opt.trim(), votes: [] })),
+        expiresAt,
+        totalVotes: 0
+      };
+    }
+
     const post = await FeedPost.create({
       userId: req.user._id,
       content: content?.trim() || '',
@@ -182,6 +227,8 @@ router.post('/', authenticate, async (req, res) => {
       mediaUrl: mediaUrl || null,
       mediaType: mediaType || null,
       mentions: mentions || [],
+      hashtags: hashtags,
+      poll: pollData
     });
 
     const populated = await FeedPost.findById(post._id)
@@ -357,6 +404,74 @@ router.post('/:id/like', authenticate, async (req, res) => {
     res.json({ success: true, data: { liked: !liked, likeCount: post.likes.length } });
   } catch (err) {
     res.status(500).json({ success: false, error: { message: 'Failed to toggle like' } });
+  }
+});
+
+// POST /api/feed/:id/poll/vote - Vote on a poll
+router.post('/:id/poll/vote', authenticate, async (req, res) => {
+  try {
+    const { optionIndex } = req.body;
+    
+    if (optionIndex === undefined || optionIndex < 0) {
+      return res.status(400).json({ success: false, error: { message: 'Invalid option' } });
+    }
+
+    const post = await FeedPost.findById(req.params.id);
+    if (!post) {
+      return res.status(404).json({ success: false, error: { message: 'Post not found' } });
+    }
+
+    if (!post.poll || !post.poll.question) {
+      return res.status(400).json({ success: false, error: { message: 'No poll in this post' } });
+    }
+
+    // Check if poll expired
+    if (new Date() > post.poll.expiresAt) {
+      return res.status(400).json({ success: false, error: { message: 'Poll has expired' } });
+    }
+
+    if (optionIndex >= post.poll.options.length) {
+      return res.status(400).json({ success: false, error: { message: 'Invalid option index' } });
+    }
+
+    const userId = String(req.user._id);
+
+    // Check if user already voted
+    let alreadyVoted = false;
+    let previousVoteIndex = -1;
+
+    post.poll.options.forEach((option, idx) => {
+      const hasVoted = option.votes.map(String).includes(userId);
+      if (hasVoted) {
+        alreadyVoted = true;
+        previousVoteIndex = idx;
+      }
+    });
+
+    // Remove previous vote if changing vote
+    if (alreadyVoted && previousVoteIndex !== -1) {
+      post.poll.options[previousVoteIndex].votes = post.poll.options[previousVoteIndex].votes.filter(
+        id => String(id) !== userId
+      );
+    }
+
+    // Add new vote (or same vote again)
+    if (!post.poll.options[optionIndex].votes.map(String).includes(userId)) {
+      post.poll.options[optionIndex].votes.push(req.user._id);
+    }
+
+    // Recalculate total votes
+    post.poll.totalVotes = post.poll.options.reduce((sum, opt) => sum + opt.votes.length, 0);
+
+    await post.save();
+
+    // Invalidate cache
+    deleteCache('feed:*').catch(() => {});
+
+    res.json({ success: true, data: { poll: post.poll } });
+  } catch (err) {
+    console.error('Poll vote error:', err);
+    res.status(500).json({ success: false, error: { message: 'Failed to vote on poll' } });
   }
 });
 

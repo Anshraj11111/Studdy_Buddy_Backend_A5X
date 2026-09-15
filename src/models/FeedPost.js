@@ -18,6 +18,20 @@ const feedPostSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
     }],
+    hashtags: [{
+      type: String,
+      lowercase: true,
+      trim: true,
+    }],
+    poll: {
+      question: { type: String, maxlength: 200 },
+      options: [{
+        text: { type: String, maxlength: 100 },
+        votes: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }]
+      }],
+      expiresAt: { type: Date },
+      totalVotes: { type: Number, default: 0 }
+    },
     category: {
       type: String,
       enum: ['All', 'Robotics', 'IoT', 'Embedded Systems', 'AI/ML', 'Projects', 'Mentorship'],
