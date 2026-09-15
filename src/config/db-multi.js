@@ -13,25 +13,25 @@ const connections = {};
 
 export const connectionOptions = {
   // ── Optimized for 10K Users (3 Servers) ──────────────────────────────────
-  maxPoolSize: 80,           // 80 connections per DB (each server uses ~25-30)
-  minPoolSize: 5,            // Keep minimum connections ready
+  maxPoolSize: 100,          // Increased from 80 to 100 connections per DB
+  minPoolSize: 10,           // Increased from 5 to keep more connections ready
   
   // ── Timeouts (Production-optimized) ───────────────────────────────────────
-  serverSelectionTimeoutMS: 15000,  // Faster timeout for server selection
+  serverSelectionTimeoutMS: 10000,  // Reduced from 15s to 10s for faster failures
   socketTimeoutMS: 45000,           // Socket timeout
-  connectTimeoutMS: 20000,          // Connection timeout
+  connectTimeoutMS: 15000,          // Reduced from 20s to 15s
   
   // ── Performance Optimizations ─────────────────────────────────────────────
   family: 4,                 // Force IPv4 (faster than IPv6)
   retryWrites: true,         // Auto-retry failed writes
   w: 'majority',             // Write concern: majority nodes
-  readPreference: 'nearest', // Read from nearest server (low latency)
+  readPreference: 'primaryPreferred', // Changed from 'nearest' - more consistent
   
   // ── Health Checks & Keep-Alive ────────────────────────────────────────────
-  heartbeatFrequencyMS: 5000,  // Check health every 5 seconds
-  maxIdleTimeMS: 60000,        // Close idle connections after 60s
+  heartbeatFrequencyMS: 10000, // Changed from 5s to 10s (reduce overhead)
+  maxIdleTimeMS: 120000,       // Increased from 60s to 120s (keep connections longer)
   
-  // ── Compression (Reduce bandwidth) ────────────────────────────────────────
+  // ── Compression (Reduce bandwidth by 60-70%) ──────────────────────────────
   compressors: ['zlib'],     // Enable compression
   zlibCompressionLevel: 6,   // Balanced compression (1-9, 6 is good)
   

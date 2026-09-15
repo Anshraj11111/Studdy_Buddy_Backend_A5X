@@ -59,8 +59,24 @@ const feedPostSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// ─── PERFORMANCE INDEXES (Critical for 10K users) ─────────────────────────────
+// Index 1: Most common query - category + createdAt (feed listing)
 feedPostSchema.index({ category: 1, createdAt: -1 });
+
+// Index 2: User's posts (profile page)
 feedPostSchema.index({ userId: 1, createdAt: -1 });
+
+// Index 3: Hashtag search
+feedPostSchema.index({ hashtags: 1, createdAt: -1 });
+
+// Index 4: Text search on content (optional - expensive, only if needed)
+// feedPostSchema.index({ content: 'text' });
+
+// Index 5: Poll expiry checks (for cleanup)
+feedPostSchema.index({ 'poll.expiresAt': 1 }, { sparse: true });
+
+// Index 6: Likes array for user's liked posts
+feedPostSchema.index({ likes: 1 });
 
 // FeedPosts are stored in PRIMARY database (with User data)
 let FeedPost;
