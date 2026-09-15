@@ -417,8 +417,7 @@ router.post('/:id/poll/vote', authenticate, pollVoteLimiter, async (req, res) =>
 
     const userId = String(req.user._id);
 
-    // OPTIMIZATION: Use atomic operations to prevent race conditions
-    // Find and check if user already voted
+    // Check if user already voted
     let previousVoteIndex = -1;
     post.poll.options.forEach((option, idx) => {
       if (option.votes.some(v => String(v) === userId)) {
@@ -426,35 +425,30 @@ router.post('/:id/poll/vote', authenticate, pollVoteLimiter, async (req, res) =>
       }
     });
 
-    // Build atomic update operations
-    const updateOps = {};
-    
-    // Remove previous vote if exists
-    if (previousVoteIndex !== -1 && previousVoteIndex !== optionIndex) {
-      updateOps[`$pull`] = { [`poll.options.${previousVoteIndex}.votes`]: req.user._id };
+    // If user already voted for the same option, do nothing
+    if (previousVoteIndex === optionIndex) {
+      return res.json({ success: true, data: { poll: post.poll } });
     }
 
-    // Add new vote if not already voted for this option
-    if (previousVoteIndex !== optionIndex) {
-      if (!updateOps[`$addToSet`]) updateOps[`$addToSet`] = {};
-      updateOps[`$addToSet`][`poll.options.${optionIndex}.votes`] = req.user._id;
+    // Remove previous vote if exists (in memory)
+    if (previousVoteIndex !== -1) {
+      post.poll.options[previousVoteIndex].votes = post.poll.options[previousVoteIndex].votes.filter(
+        v => String(v) !== userId
+      );
     }
 
-    // Execute atomic update
-    if (Object.keys(updateOps).length > 0) {
-      await FeedPost.findByIdAndUpdate(req.params.id, updateOps);
+    // Add new vote (in memory)
+    if (!post.poll.options[optionIndex].votes.some(v => String(v) === userId)) {
+      post.poll.options[optionIndex].votes.push(req.user._id);
     }
 
-    // Fetch updated post with new vote counts
-    const updatedPost = await FeedPost.findById(req.params.id).select('poll').lean();
-    
     // Recalculate total votes
-    updatedPost.poll.totalVotes = updatedPost.poll.options.reduce((sum, opt) => sum + opt.votes.length, 0);
-    
-    // Update totalVotes in DB
-    await FeedPost.findByIdAndUpdate(req.params.id, { 'poll.totalVotes': updatedPost.poll.totalVotes });
+    post.poll.totalVotes = post.poll.options.reduce((sum, opt) => sum + opt.votes.length, 0);
 
-    res.json({ success: true, data: { poll: updatedPost.poll } });
+    // Save changes
+    await post.save();
+
+    res.json({ success: true, data: { poll: post.poll } });
   } catch (err) {
     console.error('Poll vote error:', err);
     res.status(500).json({ success: false, error: { message: 'Failed to vote on poll' } });
