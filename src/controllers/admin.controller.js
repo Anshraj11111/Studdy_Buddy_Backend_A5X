@@ -4,6 +4,7 @@ import Payment from '../models/Payment.js';
 import AppSettings from '../models/AppSettings.js';
 import mongoose from 'mongoose';
 import { escapeRegex } from '../utils/sanitize.js';
+import bcrypt from 'bcryptjs';
 
 // Lazy-load models to avoid circular deps
 const getDoubt = async () => (await import('../models/Doubt.js')).default;
@@ -133,7 +134,11 @@ export const updateUser = async (req, res) => {
     const update = {};
     if (name !== undefined)           update.name           = name.trim();
     if (schoolName !== undefined)     update.schoolName     = schoolName.trim();
-    if (schoolPassword !== undefined) update.schoolPassword = schoolPassword.trim(); // empty string = remove
+    if (schoolPassword !== undefined) {
+      // Hash school password before storing (SECURITY FIX)
+      const trimmed = schoolPassword.trim();
+      update.schoolPassword = trimmed ? await bcrypt.hash(trimmed, 10) : '';
+    }
     if (city !== undefined)           update.city           = city.trim();
 
     // Use lean() so toJSON() doesn't strip schoolPassword from the response
@@ -189,7 +194,7 @@ export const preRegisterStudent = async (req, res) => {
       if (!existingUser.schoolName && !existingUser.schoolPassword) {
         const updateData = {
           schoolName: schoolName || '',
-          schoolPassword,
+          schoolPassword: await bcrypt.hash(schoolPassword, 10), // Hash before storing
         };
         
         // Update user with school credentials
@@ -213,7 +218,7 @@ export const preRegisterStudent = async (req, res) => {
           email,
           phone: phone || '',
           schoolName: schoolName || '',
-          schoolPassword,
+          schoolPassword: await bcrypt.hash(schoolPassword, 10), // Hash before storing
           createdBy: createdById,
           isUsed: true,
           usedAt: new Date(),
@@ -254,7 +259,7 @@ export const preRegisterStudent = async (req, res) => {
       email,
       phone: phone || '',
       schoolName: schoolName || '',
-      schoolPassword,
+      schoolPassword: await bcrypt.hash(schoolPassword, 10), // Hash before storing
       createdBy: createdById,
     });
 
@@ -363,7 +368,7 @@ export const updatePreRegisteredStudent = async (req, res) => {
     if (name) student.name = name;
     if (email) student.email = email;
     if (phone !== undefined) student.phone = phone;
-    if (schoolPassword) student.schoolPassword = schoolPassword;
+    if (schoolPassword) student.schoolPassword = await bcrypt.hash(schoolPassword, 10); // Hash before storing
 
     await student.save();
 
