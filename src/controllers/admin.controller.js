@@ -18,13 +18,23 @@ export const getStats = async (req, res) => {
       User.countDocuments({ role: 'student' }),
     ]);
 
+    // Count students with course access
+    const studentsWithAccess = await User.countDocuments({
+      role: 'student',
+      $or: [
+        { $and: [{ schoolName: { $exists: true, $ne: '' } }, { schoolPassword: { $exists: true, $ne: '' } }] },
+        { isPremium: true },
+        { 'paidCourses.0': { $exists: true } } // Has at least one paid course
+      ]
+    });
+
     let totalDoubts = 0, totalResources = 0;
     try { const Doubt = await getDoubt(); totalDoubts = await Doubt.countDocuments(); } catch {}
     try { const Resource = await getResource(); totalResources = await Resource.countDocuments(); } catch {}
 
     res.json({
       success: true,
-      data: { totalUsers, totalMentors, totalStudents, totalDoubts, totalResources },
+      data: { totalUsers, totalMentors, totalStudents, studentsWithAccess, totalDoubts, totalResources },
     });
   } catch (err) {
     res.status(500).json({ success: false, error: { message: err.message } });

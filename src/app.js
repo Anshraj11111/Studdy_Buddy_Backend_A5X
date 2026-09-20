@@ -27,6 +27,7 @@ import referralRoutes from './routes/referral.routes.js';
 import pushRoutes from './routes/push.routes.js';
 import lectureProgressRoutes from './routes/lectureProgress.routes.js';
 import quizRoutes from './routes/quiz.routes.js';
+import courseAccessRoutes from './routes/courseAccess.routes.js';
 import { errorHandler } from './middleware/error.middleware.js';
 import { requestLogger } from './middleware/request-logger.middleware.js';
 import { sanitizeMongoOperators } from './middleware/input-sanitization.middleware.js';
@@ -408,6 +409,7 @@ app.use('/api/referral', referralRoutes);
 app.use('/api/push', pushRoutes);
 app.use('/api', lectureProgressRoutes);
 app.use('/api', quizRoutes);
+app.use('/api/admin/course-access', courseAccessRoutes);
 
 // 404 handler
 app.use((req, res) => {
