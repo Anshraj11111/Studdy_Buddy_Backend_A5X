@@ -128,6 +128,12 @@ const userSchema = new mongoose.Schema(
       default: '',
       trim: true,
     },
+    schoolPasswordPlain: {
+      type: String,
+      default: '',
+      trim: true,
+      select: false, // Hide by default for security
+    },
     city: {
       type: String,
       default: '',

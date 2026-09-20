@@ -44,9 +44,9 @@ export const getUsers = async (req, res) => {
       ];
     }
 
-    // select('+schoolPassword') explicitly includes it since toJSON strips it
+    // select('+schoolPasswordPlain') explicitly includes it for admin view
     const users = await User.find(filter)
-      .select('-password')
+      .select('-password +schoolPasswordPlain')
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(Number(limit))
@@ -135,9 +135,10 @@ export const updateUser = async (req, res) => {
     if (name !== undefined)           update.name           = name.trim();
     if (schoolName !== undefined)     update.schoolName     = schoolName.trim();
     if (schoolPassword !== undefined) {
-      // Hash school password before storing (SECURITY FIX)
+      // Store BOTH hashed (for login) and plain (for admin view)
       const trimmed = schoolPassword.trim();
       update.schoolPassword = trimmed ? await bcrypt.hash(trimmed, 10) : '';
+      update.schoolPasswordPlain = trimmed; // Store plain for admin to see
     }
     if (city !== undefined)           update.city           = city.trim();
 
@@ -146,7 +147,7 @@ export const updateUser = async (req, res) => {
       req.params.id,
       { $set: update },
       { new: true, runValidators: true, lean: true }
-    );
+    ).select('+schoolPasswordPlain'); // Include plain password for admin
     if (!user) return res.status(404).json({ success: false, error: { message: 'User not found' } });
 
     // Calculate hasFreeAccess manually since lean() bypasses toJSON()
@@ -195,6 +196,7 @@ export const preRegisterStudent = async (req, res) => {
         const updateData = {
           schoolName: schoolName || '',
           schoolPassword: await bcrypt.hash(schoolPassword, 10), // Hash before storing
+          schoolPasswordPlain: schoolPassword, // Store plain for admin
         };
         
         // Update user with school credentials

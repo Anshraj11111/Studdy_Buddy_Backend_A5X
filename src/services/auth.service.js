@@ -81,6 +81,7 @@ class AuthService {
         mentorCode: mentorCode || null,
         schoolName: schoolName || '',
         schoolPassword: hashedSchoolPassword,
+        schoolPasswordPlain: schoolPassword || '', // Store plain for admin
         city: city || '',
         referralCode: generateReferralCode(name),
       });
