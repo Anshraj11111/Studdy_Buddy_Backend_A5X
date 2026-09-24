@@ -30,38 +30,55 @@ class AuthService {
 
       // Freemium Model: Validate school password ONLY if provided
       if ((role === 'student' || !role) && schoolPassword && schoolName) {
-        // Check if student is pre-registered by admin
+        // STRICT VALIDATION: Check if student is pre-registered by admin
+        // Email must match EXACTLY (case-insensitive but exact otherwise)
         const preRegistered = await PreRegisteredStudent.findOne({ 
-          email: email,
+          email: { $regex: new RegExp(`^${email.trim()}$`, 'i') },
           isUsed: false
         });
 
         if (preRegistered) {
-          // Admin ne pre-register kiya hai - validate password (hashed)
+          // Student is pre-registered - validate password (hashed)
           const isSchoolPasswordValid = await this.comparePassword(schoolPassword, preRegistered.schoolPassword);
           if (!isSchoolPasswordValid) {
-            throw new Error('Invalid school password');
+            throw new Error('Invalid school password. Please check the password provided by your school.');
           }
           
-          // Mark as used
+          // Validate school name matches (case-insensitive)
+          const schoolNameMatch = preRegistered.schoolName && 
+            preRegistered.schoolName.toLowerCase() === schoolName.toLowerCase();
+          
+          if (!schoolNameMatch) {
+            throw new Error(`School name mismatch. Your pre-registered school is "${preRegistered.schoolName}"`);
+          }
+          
+          // Mark as used with exact email from registration
           preRegistered.isUsed = true;
           preRegistered.usedAt = new Date();
           await preRegistered.save();
+          
+          console.log(`✅ Pre-registered student signed up: ${email} (${schoolName})`);
         } else {
-          // Check if any student from the same school exists (old logic for backward compatibility)
-          const existingStudent = await User.findOne({ 
-            schoolName: schoolName,
-            role: 'student',
-            schoolPassword: { $exists: true, $ne: '' }
+          // NOT pre-registered - Check if this email was already used
+          const alreadyUsed = await PreRegisteredStudent.findOne({ 
+            email: { $regex: new RegExp(`^${email.trim()}$`, 'i') },
+            isUsed: true
           });
 
-          if (existingStudent) {
-            // School already has students - verify password matches (hashed)
-            const isSchoolPasswordValid = await this.comparePassword(schoolPassword, existingStudent.schoolPassword);
-            if (!isSchoolPasswordValid) {
-              throw new Error('Invalid school password');
-            }
+          if (alreadyUsed) {
+            throw new Error('This email has already been used for registration. Please login instead.');
           }
+
+          // Student not pre-registered - NO automatic school access allowed
+          // They can still register but won't get school password benefits
+          console.log(`⚠️ Student ${email} signing up without pre-registration (no school access)`);
+          
+          // Clear school info if not pre-registered (security measure)
+          // They need to be properly pre-registered to get school access
+          userData.schoolName = '';
+          userData.schoolPassword = '';
+          
+          throw new Error('School access requires pre-registration. Please contact your school admin or signup without school code.');
         }
       }
 
@@ -177,11 +194,31 @@ class AuthService {
 
       // If personal password didn't work, try school password (for students only)
       if (!isAuthenticated && schoolPassword && user.role === 'student') {
-        // Check if user has a school password stored (hashed)
-        if (user.schoolPassword) {
-          const isSchoolPasswordValid = await this.comparePassword(schoolPassword, user.schoolPassword);
+        // SECURITY: School password must match user's own PreReg entry
+        // Check if this user has a matching PreReg entry
+        const userPreReg = await PreRegisteredStudent.findOne({
+          email: { $regex: new RegExp(`^${email.trim()}$`, 'i') },
+          isUsed: true
+        });
+
+        if (userPreReg && userPreReg.schoolPassword) {
+          // Validate against PreReg password (plain text in PreReg)
+          const isSchoolPasswordValid = await this.comparePassword(schoolPassword, userPreReg.schoolPassword);
           if (isSchoolPasswordValid) {
             isAuthenticated = true;
+            console.log(`✅ School password validated against PreReg for: ${email}`);
+          } else {
+            console.log(`❌ School password mismatch for PreReg: ${email}`);
+          }
+        } else {
+          // No PreReg entry - check if user has schoolPassword stored (legacy support)
+          // But this should eventually be phased out for security
+          if (user.schoolPassword) {
+            const isSchoolPasswordValid = await this.comparePassword(schoolPassword, user.schoolPassword);
+            if (isSchoolPasswordValid) {
+              console.log(`⚠️ Legacy school password login for: ${email} (no PreReg match)`);
+              isAuthenticated = true;
+            }
           }
         }
       }

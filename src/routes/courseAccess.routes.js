@@ -3,7 +3,7 @@
  */
 
 import express from 'express';
-import { getCourseAccessStats, getCourseAccessList } from '../controllers/courseAccess.controller.js';
+import { getCourseAccessStats, getCourseAccessList, getSchoolsList } from '../controllers/courseAccess.controller.js';
 import { authenticate } from '../middleware/auth.middleware.js';
 
 const router = express.Router();
@@ -16,5 +16,8 @@ router.get('/stats', getCourseAccessStats);
 
 // Get filtered list
 router.get('/list', getCourseAccessList);
+
+// Get schools list
+router.get('/schools', getSchoolsList);
 
 export default router;

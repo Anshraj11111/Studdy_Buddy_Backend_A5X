@@ -79,11 +79,11 @@ export const getCourseAccessStats = async (req, res) => {
 
 /**
  * Get detailed list by filter
- * GET /api/admin/course-access/list?filter=with|without
+ * GET /api/admin/course-access/list?filter=all|with|without|school|premium|paid&schoolName=Bardsley
  */
 export const getCourseAccessList = async (req, res) => {
   try {
-    const { filter = 'all', page = 1, limit = 50, search } = req.query;
+    const { filter = 'all', page = 1, limit = 50, search, schoolName } = req.query;
 
     // Build base query
     const query = { role: 'student' };
@@ -103,7 +103,7 @@ export const getCourseAccessList = async (req, res) => {
       .sort({ createdAt: -1 })
       .lean();
 
-    // Apply filter
+    // Apply access type filter FIRST (before school filter)
     if (filter === 'with') {
       students = students.filter(s => 
         (s.schoolName && s.schoolPassword) || 
@@ -115,6 +115,22 @@ export const getCourseAccessList = async (req, res) => {
         !(s.schoolName && s.schoolPassword) && 
         !s.isPremium && 
         (!s.paidCourses || s.paidCourses.length === 0)
+      );
+    } else if (filter === 'school') {
+      // Only school code access
+      students = students.filter(s => s.schoolName && s.schoolPassword);
+    } else if (filter === 'premium') {
+      // Only premium users
+      students = students.filter(s => s.isPremium);
+    } else if (filter === 'paid') {
+      // Only paid courses users
+      students = students.filter(s => s.paidCourses && s.paidCourses.length > 0);
+    }
+
+    // Apply school filter AFTER access filter (case-insensitive)
+    if (schoolName && schoolName !== 'all') {
+      students = students.filter(s => 
+        s.schoolName && s.schoolName.toLowerCase() === schoolName.toLowerCase()
       );
     }
 
@@ -156,6 +172,48 @@ export const getCourseAccessList = async (req, res) => {
     });
   } catch (error) {
     console.error('Get course access list error:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: error.message },
+    });
+  }
+};
+
+
+/**
+ * Get list of unique school names
+ * GET /api/admin/course-access/schools
+ */
+export const getSchoolsList = async (req, res) => {
+  try {
+    // Get unique school names from users with school passwords
+    const schools = await User.distinct('schoolName', {
+      role: 'student',
+      schoolName: { $exists: true, $ne: '' }
+    });
+
+    // Normalize school names (remove duplicates with different cases)
+    const normalizedSchools = {};
+    schools.forEach(school => {
+      if (school && school.trim()) {
+        const normalized = school.trim();
+        const lowerKey = normalized.toLowerCase();
+        // Keep the most common capitalization (or first one found)
+        if (!normalizedSchools[lowerKey]) {
+          normalizedSchools[lowerKey] = normalized;
+        }
+      }
+    });
+
+    // Get unique normalized names and sort
+    const uniqueSchools = Object.values(normalizedSchools).sort();
+
+    res.json({
+      success: true,
+      data: { schools: uniqueSchools },
+    });
+  } catch (error) {
+    console.error('Get schools list error:', error);
     res.status(500).json({
       success: false,
       error: { message: error.message },
