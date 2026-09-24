@@ -104,10 +104,10 @@ router.get('/liked', authenticate, async (req, res) => {
   }
 });
 
-// GET /api/feed?category=Robotics&page=1&limit=20&hashtag=ai
+// GET /api/feed?category=Robotics&page=1&limit=20&hashtag=ai&sort=random
 router.get('/', authenticate, async (req, res) => {
   try {
-    const { category, page = 1, limit = 20, search = '', userId, hashtag } = req.query;
+    const { category, page = 1, limit = 20, search = '', userId, hashtag, sort = 'random' } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     // Build query
@@ -123,20 +123,41 @@ router.get('/', authenticate, async (req, res) => {
       query.userId = userId;
     }
 
-    // OPTIMIZATION: Use lean() for 40% faster queries (no Mongoose overhead)
-    // OPTIMIZATION: Select only needed fields to reduce data transfer
-    const posts = await FeedPost.find(query)
-      .populate('userId', 'name profileImage role skills')
-      .populate({
-        path: 'comments.userId',
-        select: 'name profileImage',
-        options: { limit: 5 } // Limit populated comments for performance
-      })
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(parseInt(limit))
-      .lean() // 40% faster - returns plain JS objects
-      .exec();
+    // Random sort: Use MongoDB's $sample aggregation for true randomness
+    // Or use simple random ID offset for better performance
+    let posts;
+    
+    if (sort === 'random') {
+      // Use aggregation pipeline for random posts (every refresh gets different posts)
+      posts = await FeedPost.aggregate([
+        { $match: query },
+        { $sample: { size: parseInt(limit) } }, // Random sampling
+        {
+          $lookup: {
+            from: 'users',
+            localField: 'userId',
+            foreignField: '_id',
+            as: 'userId',
+            pipeline: [{ $project: { name: 1, profileImage: 1, role: 1, skills: 1 } }]
+          }
+        },
+        { $unwind: { path: '$userId', preserveNullAndEmptyArrays: true } },
+      ]);
+    } else {
+      // Default: Latest first (chronological)
+      posts = await FeedPost.find(query)
+        .populate('userId', 'name profileImage role skills')
+        .populate({
+          path: 'comments.userId',
+          select: 'name profileImage',
+          options: { limit: 5 }
+        })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parseInt(limit))
+        .lean()
+        .exec();
+    }
 
     // OPTIMIZATION: Only count on first page (expensive operation)
     let total;
