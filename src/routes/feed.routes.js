@@ -142,6 +142,48 @@ router.get('/', authenticate, async (req, res) => {
           }
         },
         { $unwind: { path: '$userId', preserveNullAndEmptyArrays: true } },
+        // Populate comments.userId for each comment
+        {
+          $lookup: {
+            from: 'users',
+            localField: 'comments.userId',
+            foreignField: '_id',
+            as: 'commentUsers'
+          }
+        },
+        {
+          $addFields: {
+            comments: {
+              $map: {
+                input: '$comments',
+                as: 'comment',
+                in: {
+                  $mergeObjects: [
+                    '$$comment',
+                    {
+                      userId: {
+                        $arrayElemAt: [
+                          {
+                            $filter: {
+                              input: '$commentUsers',
+                              cond: { $eq: ['$$this._id', '$$comment.userId'] }
+                            }
+                          },
+                          0
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          $project: {
+            commentUsers: 0 // Remove temporary field
+          }
+        }
       ]);
     } else {
       // Default: Latest first (chronological)
