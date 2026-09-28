@@ -138,14 +138,23 @@ export const deleteCache = async (key) => {
     if (key.endsWith('*')) {
       // Pattern delete — scan and delete all matching keys
       const prefix = key.slice(0, -1);
-      let cursor = 0;
+      let cursor = '0'; // Redis SCAN returns string cursor
+      let deletedCount = 0;
+      
       do {
         const result = await redisClient.scan(cursor, { MATCH: key, COUNT: 100 });
         cursor = result.cursor;
-        if (result.keys.length) {
-          await redisClient.del(result.keys);
+        
+        if (result.keys.length > 0) {
+          // Use spread operator to pass keys as individual arguments
+          await redisClient.del(...result.keys);
+          deletedCount += result.keys.length;
         }
-      } while (cursor !== 0);
+      } while (cursor !== '0'); // Compare with string '0'
+      
+      if (deletedCount > 0) {
+        console.log(`🗑️ Deleted ${deletedCount} cached keys matching ${key}`);
+      }
     } else {
       await redisClient.del(key);
     }

@@ -285,38 +285,49 @@ router.post('/', authenticate, writeLimiter, async (req, res) => {
     // Send notifications to mentioned users
     const io = req.app.get('io');
     if (mentions && mentions.length > 0) {
+      console.log(`📢 Sending mention notifications to ${mentions.length} user(s)`);
+      
+      // Get a short preview of the post content
+      const contentPreview = content?.trim().substring(0, 50) || 'a post';
+      const preview = contentPreview.length < content?.trim().length ? `${contentPreview}...` : contentPreview;
+      
       for (const mentionedUserId of mentions) {
         if (String(mentionedUserId) !== String(req.user._id)) {
           try {
+            console.log(`  📬 Notifying user ${mentionedUserId} about mention`);
+            
             const notification = await Notification.create({
-              userId: mentionedUserId,
+              recipient: mentionedUserId,
+              sender: req.user._id,
               type: 'mention',
+              postId: post._id,
               message: `${req.user.name} mentioned you in a post`,
-              relatedId: post._id,
-              relatedModel: 'FeedPost',
             });
 
             // Populate notification
-            await notification.populate('userId', 'name profileImage');
+            await notification.populate('sender', 'name profileImage');
 
             // Emit socket notification
             emitNotification(io, mentionedUserId, notification);
+            console.log(`  ✅ Socket notification sent to user:${mentionedUserId}`);
 
-            // Send push notification
+            // Send push notification with post preview
             try {
               await sendPushToUser(mentionedUserId, {
-                title: 'New Mention',
-                body: `${req.user.name} mentioned you in a post`,
+                title: `${req.user.name} mentioned you`,
+                body: preview,
                 url: `/communities?postId=${post._id}`,
               });
+              console.log(`  ✅ Push notification sent to user ${mentionedUserId}`);
             } catch (pushErr) {
-              console.error('Push notification failed for mention:', pushErr);
+              console.error('  ❌ Push notification failed for mention:', pushErr);
             }
           } catch (notifErr) {
-            console.error('Failed to create mention notification:', notifErr);
+            console.error(`  ❌ Failed to create mention notification for ${mentionedUserId}:`, notifErr);
           }
         }
       }
+      console.log(`✅ All mention notifications processed`);
     }
 
     // Invalidate feed cache so new post shows immediately
