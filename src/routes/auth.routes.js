@@ -56,6 +56,7 @@ router.get('/schools', async (req, res) => {
 // Protected routes
 router.get('/profile', authenticate, authController.getProfile);
 router.put('/profile', authenticate, authController.updateProfile);
+router.post('/daily-visit', authenticate, authController.dailyVisit);
 router.post('/refresh-token', authenticate, authController.refreshToken);
 
 export default router;

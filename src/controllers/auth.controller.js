@@ -225,12 +225,38 @@ export const login = async (req, res) => {
  * Get current user profile
  * GET /api/auth/profile
  */
+/**
+ * Award daily visit XP (first visit of the day)
+ * POST /api/auth/daily-visit
+ */
+export const dailyVisit = async (req, res) => {
+  try {
+    const { addXP } = await import('../services/xp.service.js');
+    await addXP(req.user._id, 'daily_login');
+
+    res.status(200).json({
+      success: true,
+      message: 'Daily visit recorded',
+    });
+  } catch (error) {
+    console.error('Daily visit XP failed:', error);
+    // Don't fail the request, XP is bonus
+    res.status(200).json({
+      success: true,
+      message: 'Visit recorded',
+    });
+  }
+};
+
 export const getProfile = async (req, res) => {
   try {
     const user = await authService.getUserById(req.user._id);
 
     // Use toOwnerJSON if available (includes private fields), otherwise fall back to toJSON
     const userData = typeof user.toOwnerJSON === 'function' ? user.toOwnerJSON() : user.toJSON();
+
+    // DEBUG: Log XP value to confirm it's being sent
+    console.log(`[DEBUG] getProfile: user=${user.name}, xp=${user.xp}, userData.xp=${userData.xp}`);
 
     res.status(200).json({
       success: true,
@@ -406,6 +432,7 @@ export default {
   register,
   login,
   getProfile,
+  dailyVisit,
   updateProfile,
   forgotPassword,
   resetPassword,

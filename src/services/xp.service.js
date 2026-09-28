@@ -9,7 +9,7 @@ export const XP_REWARDS = {
   doubt_posted:    15,   // post a doubt
   doubt_resolved:  30,   // your doubt gets resolved / answered
   resource_upload: 25,   // upload a resource
-  daily_login:     10,   // first activity of the day
+  daily_login:     20,   // first visit/activity of the day (changed from 10 to 20)
   streak_bonus:    15,   // bonus for maintaining streak
 };
 
@@ -50,6 +50,24 @@ export const addXP = async (userId, action, override) => {
 
     const now   = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    // ── Daily login check (MUST be first visit of the day) ───────────────
+    if (action === 'daily_login') {
+      const lastDate  = user.streak?.lastActivityDate
+        ? new Date(user.streak.lastActivityDate)
+        : null;
+      const lastDay   = lastDate
+        ? new Date(lastDate.getFullYear(), lastDate.getMonth(), lastDate.getDate())
+        : null;
+
+      const isFirstToday = !lastDay || lastDay < today;
+      
+      if (!isFirstToday) {
+        // Already awarded XP today, skip
+        console.log(`⛔ Daily login XP already awarded today for user ${userId}`);
+        return;
+      }
+    }
 
     // ── Daily post limit check (3 posts per day get XP) ──────────────────
     if (action === 'post') {
