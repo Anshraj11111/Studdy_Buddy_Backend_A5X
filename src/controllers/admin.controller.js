@@ -231,6 +231,7 @@ export const preRegisterStudent = async (req, res) => {
           phone: phone || '',
           schoolName: schoolName || '',
           schoolPassword: await bcrypt.hash(schoolPassword, 10), // Hash before storing
+          schoolPasswordPlain: schoolPassword, // Store plain for admin viewing
           createdBy: createdById,
           isUsed: true,
           usedAt: new Date(),
@@ -272,6 +273,7 @@ export const preRegisterStudent = async (req, res) => {
       phone: phone || '',
       schoolName: schoolName || '',
       schoolPassword: await bcrypt.hash(schoolPassword, 10), // Hash before storing
+      schoolPasswordPlain: schoolPassword, // Store plain for admin viewing
       createdBy: createdById,
     });
 
@@ -380,7 +382,10 @@ export const updatePreRegisteredStudent = async (req, res) => {
     if (name) student.name = name;
     if (email) student.email = email;
     if (phone !== undefined) student.phone = phone;
-    if (schoolPassword) student.schoolPassword = await bcrypt.hash(schoolPassword, 10); // Hash before storing
+    if (schoolPassword) {
+      student.schoolPassword = await bcrypt.hash(schoolPassword, 10); // Hash before storing
+      student.schoolPasswordPlain = schoolPassword; // Store plain for admin viewing
+    }
 
     await student.save();
 

@@ -33,6 +33,12 @@ const preRegisteredStudentSchema = new mongoose.Schema(
       required: [true, 'School password is required'],
       trim: true,
     },
+    schoolPasswordPlain: {
+      type: String,
+      default: '',
+      trim: true,
+      select: true, // Include in queries by default for admin viewing
+    },
     isUsed: {
       type: Boolean,
       default: false,

@@ -69,16 +69,13 @@ class AuthService {
             throw new Error('This email has already been used for registration. Please login instead.');
           }
 
-          // Student not pre-registered - NO automatic school access allowed
-          // They can still register but won't get school password benefits
-          console.log(`⚠️ Student ${email} signing up without pre-registration (no school access)`);
+          // Student not pre-registered - Clear school credentials for security
+          // They can still register as freemium user without school access
+          console.log(`⚠️ Student ${email} signing up without pre-registration (freemium access, no school benefits)`);
           
           // Clear school info if not pre-registered (security measure)
-          // They need to be properly pre-registered to get school access
           userData.schoolName = '';
           userData.schoolPassword = '';
-          
-          throw new Error('School access requires pre-registration. Please contact your school admin or signup without school code.');
         }
       }
 
