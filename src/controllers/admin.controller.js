@@ -62,9 +62,18 @@ export const getUsers = async (req, res) => {
       .limit(Number(limit))
       .lean(); // lean() bypasses toJSON so schoolPassword is included
 
+    // Transform users to show plain text password for admin viewing
+    const usersWithPlainPassword = users.map(user => {
+      // Replace schoolPassword (hashed) with schoolPasswordPlain for display
+      if (user.schoolPasswordPlain) {
+        user.schoolPassword = user.schoolPasswordPlain;
+      }
+      return user;
+    });
+
     const total = await User.countDocuments(filter);
 
-    res.json({ success: true, data: { users, total, page: Number(page) } });
+    res.json({ success: true, data: { users: usersWithPlainPassword, total, page: Number(page) } });
   } catch (err) {
     res.status(500).json({ success: false, error: { message: err.message } });
   }
@@ -162,6 +171,11 @@ export const updateUser = async (req, res) => {
 
     // Calculate hasFreeAccess manually since lean() bypasses toJSON()
     user.hasFreeAccess = !!(user.schoolName && user.schoolPassword) || user.isPremium;
+    
+    // Replace schoolPassword (hashed) with schoolPasswordPlain for display
+    if (user.schoolPasswordPlain) {
+      user.schoolPassword = user.schoolPasswordPlain;
+    }
     
     // Strip login password before sending
     const { password, ...safeUser } = user;
@@ -314,9 +328,17 @@ export const getPreRegisteredStudents = async (req, res) => {
 
     const total = await PreRegisteredStudent.countDocuments(filter);
 
+    // Transform students to show plain text password for admin viewing
+    const studentsWithPlainPassword = students.map(student => {
+      const studentObj = student.toObject();
+      // Replace schoolPassword (hashed) with schoolPasswordPlain for display
+      studentObj.schoolPassword = studentObj.schoolPasswordPlain || studentObj.schoolPassword;
+      return studentObj;
+    });
+
     res.json({
       success: true,
-      data: { students, total, page: Number(page) },
+      data: { students: studentsWithPlainPassword, total, page: Number(page) },
     });
   } catch (err) {
     res.status(500).json({ success: false, error: { message: err.message } });
@@ -389,9 +411,13 @@ export const updatePreRegisteredStudent = async (req, res) => {
 
     await student.save();
 
+    // Transform student to show plain text password for admin viewing
+    const studentObj = student.toObject();
+    studentObj.schoolPassword = studentObj.schoolPasswordPlain || studentObj.schoolPassword;
+
     res.json({
       success: true,
-      data: { student },
+      data: { student: studentObj },
     });
   } catch (err) {
     res.status(500).json({ success: false, error: { message: err.message } });
