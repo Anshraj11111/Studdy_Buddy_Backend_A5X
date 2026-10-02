@@ -32,6 +32,23 @@ export const register = async (req, res) => {
     // School info is now optional for students (freemium model)
     // Students WITH school code get free access
     // Students WITHOUT school code can signup but need to pay for resources
+    
+    // IMPORTANT: If providing school credentials, BOTH schoolName and schoolPassword required
+    if ((role === 'student' || !role)) {
+      const hasSchoolName = schoolName && schoolName.trim() !== '';
+      const hasSchoolPassword = schoolPassword && schoolPassword.trim() !== '';
+      
+      // Either provide BOTH or provide NEITHER
+      if (hasSchoolName !== hasSchoolPassword) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            message: 'Both school name and school password are required. Please provide both or leave both empty.',
+            code: 'INCOMPLETE_SCHOOL_INFO',
+          },
+        });
+      }
+    }
 
     // Validate mentor code if role is mentor
     if (role === 'mentor') {
