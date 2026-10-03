@@ -396,6 +396,8 @@ app.use('/api/feed', feedRoutes);
 app.use('/api/connections', connectionRoutes);
 app.use('/api/follow', followRoutes);
 app.use('/api/notifications', notificationRoutes);
+// IMPORTANT: Specific /admin/course-access routes MUST come BEFORE generic /admin routes
+app.use('/api/admin/course-access', courseAccessRoutes);
 app.use('/api/admin', adminRoutes);
 app.use("/api/ai", chatRoutes);
 app.use('/api/rewards', rewardsRoutes);
@@ -409,7 +411,6 @@ app.use('/api/referral', referralRoutes);
 app.use('/api/push', pushRoutes);
 app.use('/api', lectureProgressRoutes);
 app.use('/api', quizRoutes);
-app.use('/api/admin/course-access', courseAccessRoutes);
 
 // 404 handler
 app.use((req, res) => {

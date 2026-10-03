@@ -50,7 +50,6 @@ import {
   getQuizAttemptDetail,
   getQuizStats,
 } from '../controllers/admin.controller.js';
-import { authenticate } from '../middleware/auth.middleware.js';
 
 const router = express.Router();
 
