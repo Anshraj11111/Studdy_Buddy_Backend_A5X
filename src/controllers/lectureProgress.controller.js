@@ -1,5 +1,5 @@
 import LectureProgress from '../models/LectureProgress.js';
-import Resource from '../models/Resource.js'; // Resources are lectures
+import mongoose from 'mongoose';
 
 /**
  * Update lecture watch progress
@@ -11,12 +11,11 @@ export const updateProgress = async (req, res) => {
     const { watchedDuration, totalDuration, courseId, moduleId } = req.body;
     const userId = req.user._id;
 
-    // Validate lecture exists
-    const lecture = await Resource.findById(lectureId);
-    if (!lecture) {
-      return res.status(404).json({
+    // Validate lectureId is a valid ObjectId
+    if (!mongoose.Types.ObjectId.isValid(lectureId)) {
+      return res.status(400).json({
         success: false,
-        error: { message: 'Lecture not found' },
+        error: { message: 'Invalid lecture ID' },
       });
     }
 
@@ -32,11 +31,18 @@ export const updateProgress = async (req, res) => {
     let progress = await LectureProgress.findOne({ userId, lectureId });
 
     if (!progress) {
+      // courseId and moduleId must come from request body
+      if (!courseId || !moduleId) {
+        return res.status(400).json({
+          success: false,
+          error: { message: 'courseId and moduleId are required' },
+        });
+      }
       progress = new LectureProgress({
         userId,
         lectureId,
-        courseId: courseId || lecture.courseId,
-        moduleId: moduleId || lecture.moduleId,
+        courseId,
+        moduleId,
       });
     }
 
