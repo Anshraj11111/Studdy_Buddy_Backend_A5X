@@ -126,8 +126,19 @@ class AuthService {
       const channelId = SchoolChannel.generateChannelId(user.schoolName, user.city);
       console.log(`🔍 Looking for channel with ID: ${channelId} for user ${user.name} (school: ${user.schoolName}, city: ${user.city})`);
 
-      // Find existing school channel (DO NOT CREATE automatically)
-      const channel = await SchoolChannel.findOne({ channelId });
+      // Find existing school channel — try exact channelId first, then by schoolName only as fallback
+      let channel = await SchoolChannel.findOne({ channelId });
+
+      // Fallback: if city is empty or wrong, find channel by schoolName alone
+      if (!channel && user.schoolName) {
+        const schoolNorm = user.schoolName.trim().toLowerCase().replace(/\s+/g, '-').replace(/-+/g, '-');
+        channel = await SchoolChannel.findOne({ 
+          channelId: { $regex: new RegExp(`^${schoolNorm}`) }
+        });
+        if (channel) {
+          console.log(`🔄 Found channel via schoolName fallback: ${channel.channelId}`);
+        }
+      }
 
       if (channel) {
         // Add user to existing channel if not already a member
