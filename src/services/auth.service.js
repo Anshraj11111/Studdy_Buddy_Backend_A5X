@@ -69,13 +69,10 @@ class AuthService {
             throw new Error('This email has already been used for registration. Please login instead.');
           }
 
-          // Student not pre-registered - Clear school credentials for security
-          // They can still register as freemium user without school access
-          console.log(`⚠️ Student ${email} signing up without pre-registration (freemium access, no school benefits)`);
-          
-          // Clear school info if not pre-registered (security measure)
-          userData.schoolName = '';
-          userData.schoolPassword = '';
+          // Student not pre-registered but provided school info - allow freemium
+          // Keep schoolName so they can still join school channel
+          console.log(`⚠️ Student ${email} signing up without pre-registration (freemium access)`);
+          // DO NOT clear schoolName/city - keep them so autoJoinSchoolChannel works
         }
       }
 
@@ -265,7 +262,11 @@ class AuthService {
 
       // Add hasFreeAccess flag for frontend
       // Mentors always have free access, students need school credentials or premium
-      user.hasFreeAccess = user.role === 'mentor' || !!(user.schoolName && user.schoolPassword) || user.isPremium;
+      // Also check PreReg to confirm school access
+      user.hasFreeAccess = user.role === 'mentor' || 
+        !!(user.schoolName && user.schoolPassword) || 
+        user.isPremium ||
+        user.hasFreeAccess === true;
 
       // Generate JWT token
       const token = this.generateToken(user._id);
