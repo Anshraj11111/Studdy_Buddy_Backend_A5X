@@ -401,20 +401,77 @@ export const acceptRequest = async (req, res) => {
     request.status = 'accepted';
     await request.save();
 
-    // Notify student via socket
+    // Send comprehensive notification to student
     try {
+      console.log('📢 [Broadcast] Sending approval notification to student:', request.user._id);
+      
+      const Notification = (await import('../models/Notification.js')).default;
+      const { sendPushToUser } = await import('../services/webPush.service.js');
       const io = req.app.get('io');
-      if (io) io.to(`user:${request.user._id}`).emit('broadcastRequestResolved', {
-        status: 'accepted', 
-        channel: request.requestedChannel,
-        enrollment: {
-          channel: newEnrollment.channel,
-          school: newEnrollment.school,
-          class: newEnrollment.class,
-          joinedAt: newEnrollment.joinedAt
-        }
+
+      // Get channel display name
+      const channelNames = {
+        robotics: 'Robotics',
+        aiml: 'AI/ML',
+        electronics: 'Electronics',
+        renewable_energy: 'Renewable Energy'
+      };
+      const channelDisplayName = channelNames[request.requestedChannel] || request.requestedChannel;
+
+      // Create in-app notification
+      const notification = await Notification.create({
+        recipient: request.user._id,
+        sender: null, // System notification
+        type: 'broadcast_approved',
+        message: `Your request to join ${channelDisplayName} channel has been approved! 🎉`,
+        metadata: {
+          channel: request.requestedChannel,
+          school: request.school,
+          class: request.class,
+        },
+        read: false,
       });
-    } catch (_) {}
+      console.log(`📢 [Broadcast] ✅ Created in-app notification`);
+
+      // Emit Socket.IO notification (real-time)
+      if (io) {
+        io.to(`user:${request.user._id}`).emit('notification', {
+          type: 'broadcast_approved',
+          message: `Your request to join ${channelDisplayName} channel has been approved!`,
+          metadata: {
+            channel: request.requestedChannel,
+          },
+        });
+        
+        // Also emit the old event for backward compatibility
+        io.to(`user:${request.user._id}`).emit('broadcastRequestResolved', {
+          status: 'accepted', 
+          channel: request.requestedChannel,
+          enrollment: {
+            channel: newEnrollment.channel,
+            school: newEnrollment.school,
+            class: newEnrollment.class,
+            joinedAt: newEnrollment.joinedAt
+          }
+        });
+      }
+      console.log(`📢 [Broadcast] ✅ Emitted socket notification`);
+
+      // Send Web Push notification
+      await sendPushToUser(request.user._id.toString(), {
+        title: '🎉 Channel Request Approved',
+        body: `You can now access ${channelDisplayName} channel!`,
+        icon: '/icons/icon-192x192.png',
+        url: '/broadcast',
+        type: 'broadcast_approved',
+      });
+      console.log(`📢 [Broadcast] ✅ Web push sent`);
+
+      console.log(`✅ Sent broadcast approval notification to student ${request.user.name}`);
+    } catch (notifError) {
+      console.error('❌ [Broadcast] Notification error:', notifError);
+      // Don't fail the approval if notification fails
+    }
 
     return res.json({ success: true, enrollment: newEnrollment });
   } catch (err) {
@@ -432,12 +489,69 @@ export const rejectRequest = async (req, res) => {
     request.status = 'rejected';
     await request.save();
 
+    // Send comprehensive notification to student
     try {
+      console.log('📢 [Broadcast] Sending rejection notification to student:', request.user._id);
+      
+      const Notification = (await import('../models/Notification.js')).default;
+      const { sendPushToUser } = await import('../services/webPush.service.js');
       const io = req.app.get('io');
-      if (io) io.to(`user:${request.user._id}`).emit('broadcastRequestResolved', {
-        status: 'rejected', channel: request.requestedChannel,
+
+      // Get channel display name
+      const channelNames = {
+        robotics: 'Robotics',
+        aiml: 'AI/ML',
+        electronics: 'Electronics',
+        renewable_energy: 'Renewable Energy'
+      };
+      const channelDisplayName = channelNames[request.requestedChannel] || request.requestedChannel;
+
+      // Create in-app notification
+      const notification = await Notification.create({
+        recipient: request.user._id,
+        sender: null, // System notification
+        type: 'broadcast_rejected',
+        message: `Your request to join ${channelDisplayName} channel was not approved`,
+        metadata: {
+          channel: request.requestedChannel,
+        },
+        read: false,
       });
-    } catch (_) {}
+      console.log(`📢 [Broadcast] ✅ Created in-app notification`);
+
+      // Emit Socket.IO notification (real-time)
+      if (io) {
+        io.to(`user:${request.user._id}`).emit('notification', {
+          type: 'broadcast_rejected',
+          message: `Your request to join ${channelDisplayName} channel was not approved`,
+          metadata: {
+            channel: request.requestedChannel,
+          },
+        });
+        
+        // Also emit the old event for backward compatibility
+        io.to(`user:${request.user._id}`).emit('broadcastRequestResolved', {
+          status: 'rejected', 
+          channel: request.requestedChannel,
+        });
+      }
+      console.log(`📢 [Broadcast] ✅ Emitted socket notification`);
+
+      // Send Web Push notification
+      await sendPushToUser(request.user._id.toString(), {
+        title: 'Channel Request Update',
+        body: `Your request for ${channelDisplayName} channel was not approved`,
+        icon: '/icons/icon-192x192.png',
+        url: '/broadcast',
+        type: 'broadcast_rejected',
+      });
+      console.log(`📢 [Broadcast] ✅ Web push sent`);
+
+      console.log(`✅ Sent broadcast rejection notification to student`);
+    } catch (notifError) {
+      console.error('❌ [Broadcast] Notification error:', notifError);
+      // Don't fail the rejection if notification fails
+    }
 
     return res.json({ success: true });
   } catch (err) {
@@ -617,6 +731,88 @@ export const startStream = async (req, res) => {
     stream.endedAt = null;
     stream.viewerCount = 0;
     await stream.save();
+
+    // CRITICAL: Notify ALL channel members that stream started
+    try {
+      console.log('📢 [Stream] 🔴 LIVE STREAM STARTED - Notifying all members of', channel);
+      
+      const Notification = (await import('../models/Notification.js')).default;
+      const { sendPushToUser } = await import('../services/webPush.service.js');
+      const BroadcastEnrollment = (await import('../models/BroadcastEnrollment.js')).default;
+      const io = req.app.get('io');
+
+      // Get channel display name
+      const channelNames = {
+        robotics: 'Robotics',
+        aiml: 'AI/ML',
+        electronics: 'Electronics',
+        renewable_energy: 'Renewable Energy'
+      };
+      const channelDisplayName = channelNames[channel] || channel;
+
+      // Find all enrolled members in this channel
+      const enrollments = await BroadcastEnrollment.find({ channel }).select('user').lean();
+      const memberIds = enrollments.map(e => e.user.toString());
+      
+      console.log(`📢 [Stream] Found ${memberIds.length} enrolled members in ${channel}`);
+
+      if (memberIds.length > 0) {
+        // Create notifications for all members
+        const notifications = memberIds.map(memberId => ({
+          recipient: memberId,
+          sender: null, // System notification
+          type: 'stream_started',
+          message: `🔴 LIVE: ${channelDisplayName} class is streaming now!`,
+          metadata: {
+            channel: channel,
+            streamTitle: stream.streamTitle || `${channelDisplayName} Live Class`,
+            youtubeVideoId: stream.youtubeVideoId,
+          },
+          read: false,
+        }));
+
+        const savedNotifs = await Notification.insertMany(notifications);
+        console.log(`📢 [Stream] ✅ Created ${savedNotifs.length} in-app notifications`);
+
+        // Emit Socket.IO to all members (real-time)
+        if (io) {
+          memberIds.forEach(memberId => {
+            io.to(`user:${memberId}`).emit('notification', {
+              type: 'stream_started',
+              message: `🔴 LIVE: ${channelDisplayName} class is streaming now!`,
+              metadata: {
+                channel: channel,
+                youtubeVideoId: stream.youtubeVideoId,
+              },
+            });
+          });
+          console.log(`📢 [Stream] ✅ Emitted ${memberIds.length} socket notifications`);
+        }
+
+        // Send Web Push to all members (phone notifications!)
+        console.log(`📢 [Stream] Sending web push to ${memberIds.length} members...`);
+        const pushPromises = memberIds.map(memberId =>
+          sendPushToUser(memberId, {
+            title: `🔴 ${channelDisplayName} is LIVE!`,
+            body: stream.streamTitle || `Join the ${channelDisplayName} live class now!`,
+            icon: '/icons/icon-192x192.png',
+            url: `/broadcast?channel=${channel}`,
+            type: 'stream_started',
+          })
+        );
+        const pushResults = await Promise.allSettled(pushPromises);
+        const pushSuccess = pushResults.filter(r => r.status === 'fulfilled').length;
+        console.log(`📢 [Stream] ✅ Web push: ${pushSuccess} success, ${pushResults.length - pushSuccess} failed`);
+
+        console.log(`✅ Sent live stream notifications to ${memberIds.length} members of ${channel} channel`);
+      } else {
+        console.log('📢 [Stream] ⚠️ No members enrolled in this channel');
+      }
+    } catch (notifError) {
+      console.error('❌ [Stream] Notification error:', notifError);
+      console.error('📢 [Stream] Stack:', notifError.stack);
+      // Don't fail stream start if notification fails
+    }
 
     res.json({
       success: true,
