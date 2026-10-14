@@ -567,6 +567,73 @@ export const addReply = async (req, res) => {
     // Award XP for replying to a doubt
     await addXP(req.user._id, 'doubt_posted'); // Replying is similar effort to posting
 
+    // Send notification to the doubt owner (student) when someone replies
+    try {
+      console.log('📢 [Reply Notification] Starting notification process...');
+      
+      // Get the doubt owner ID
+      const doubtOwnerId = doubt.userId._id ? doubt.userId._id.toString() : doubt.userId.toString();
+      const currentUserId = req.user._id.toString();
+      
+      // Only send notification if reply is NOT from the doubt owner themselves
+      if (doubtOwnerId !== currentUserId) {
+        const User = (await import('../models/User.js')).default;
+        const Notification = (await import('../models/Notification.js')).default;
+        const { sendPushToUser } = await import('../services/webPush.service.js');
+        const io = req.app.get('io');
+        
+        // Get doubt owner details
+        const doubtOwner = await User.findById(doubtOwnerId).select('_id name').lean();
+        
+        if (doubtOwner) {
+          console.log(`📢 [Reply Notification] Sending to student: ${doubtOwner.name}`);
+          
+          // Create in-app notification
+          const notification = await Notification.create({
+            recipient: doubtOwner._id,
+            sender: req.user._id,
+            type: 'doubt_reply',
+            doubtId: doubt._id,
+            message: `${req.user.name} replied to your doubt: "${doubt.title.length > 50 ? doubt.title.substring(0, 50) + '...' : doubt.title}"`,
+            read: false,
+          });
+          console.log(`📢 [Reply Notification] ✅ Created in-app notification`);
+          
+          // Emit real-time Socket.IO notification
+          const room = `user:${doubtOwner._id.toString()}`;
+          console.log(`📢 [Reply Notification] Emitting socket to room: ${room}`);
+          io.to(room).emit('notification', {
+            type: 'doubt_reply',
+            doubtId: doubt._id,
+            message: `${req.user.name} replied to your doubt`,
+            sender: {
+              _id: req.user._id,
+              name: req.user.name,
+              profileImage: req.user.profileImage,
+            },
+          });
+          console.log(`📢 [Reply Notification] ✅ Emitted socket notification`);
+          
+          // Send Web Push notification
+          await sendPushToUser(doubtOwner._id.toString(), {
+            title: '💬 New Reply to Your Doubt',
+            body: `${req.user.name} replied: ${content?.substring(0, 80) || 'View reply'}`,
+            icon: req.user.profileImage || '/icons/icon-192x192.png',
+            url: `/doubts/${doubt._id}`,
+            type: 'doubt_reply',
+          });
+          console.log(`📢 [Reply Notification] ✅ Web push sent`);
+          
+          console.log(`✅ Sent reply notification to student ${doubtOwner.name}`);
+        }
+      } else {
+        console.log(`📢 [Reply Notification] Skipped - reply from doubt owner themselves`);
+      }
+    } catch (notifError) {
+      console.error('❌ [Reply Notification] Error:', notifError);
+      // Don't fail reply creation if notification fails
+    }
+
     res.status(200).json({
       success: true,
       data: { doubt },
