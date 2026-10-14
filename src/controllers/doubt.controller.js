@@ -92,13 +92,17 @@ export const createDoubt = async (req, res) => {
 
     // Send notification to all mentors about new doubt
     try {
+      console.log('📢 [Doubt Notification] Starting notification process...');
       const User = (await import('../models/User.js')).default;
       const Notification = (await import('../models/Notification.js')).default;
-      const { getIO } = await import('../config/socket.js');
       const { sendPushToUser } = await import('../services/webPush.service.js');
 
+      // Get Socket.IO instance from app
+      const io = req.app.get('io');
+      
       // Find all mentors
-      const mentors = await User.find({ role: 'mentor' }).select('_id').lean();
+      const mentors = await User.find({ role: 'mentor' }).select('_id name').lean();
+      console.log(`📢 [Doubt Notification] Found ${mentors.length} mentors:`, mentors.map(m => m.name));
       
       if (mentors.length > 0) {
         // Create notifications for all mentors
@@ -111,12 +115,14 @@ export const createDoubt = async (req, res) => {
           read: false,
         }));
 
-        await Notification.insertMany(notifications);
+        const savedNotifs = await Notification.insertMany(notifications);
+        console.log(`📢 [Doubt Notification] ✅ Created ${savedNotifs.length} in-app notifications`);
         
         // Emit real-time notification to online mentors via Socket.io
-        const io = getIO();
         mentors.forEach(mentor => {
-          io.to(mentor._id.toString()).emit('notification', {
+          const room = `user:${mentor._id.toString()}`;
+          console.log(`📢 [Doubt Notification] Emitting socket to room: ${room}`);
+          io.to(room).emit('notification', {
             type: 'doubt',
             doubtId: doubt._id,
             message: `New doubt: ${title.length > 50 ? title.substring(0, 50) + '...' : title}`,
@@ -127,8 +133,10 @@ export const createDoubt = async (req, res) => {
             },
           });
         });
+        console.log(`📢 [Doubt Notification] ✅ Emitted ${mentors.length} socket notifications`);
 
         // Send Web Push Notifications to all mentors (even if offline/browser closed)
+        console.log(`📢 [Doubt Notification] Sending web push to ${mentors.length} mentors...`);
         const pushPromises = mentors.map(mentor =>
           sendPushToUser(mentor._id.toString(), {
             title: '🆘 New Doubt Posted',
@@ -138,12 +146,17 @@ export const createDoubt = async (req, res) => {
             type: 'doubt',
           })
         );
-        await Promise.allSettled(pushPromises);
+        const pushResults = await Promise.allSettled(pushPromises);
+        const pushSuccess = pushResults.filter(r => r.status === 'fulfilled').length;
+        console.log(`📢 [Doubt Notification] ✅ Web push: ${pushSuccess} success, ${pushResults.length - pushSuccess} failed`);
 
-        console.log(`✅ Sent doubt notifications to ${mentors.length} mentors (in-app + push)`);
+        console.log(`✅ Sent doubt notifications to ${mentors.length} mentors (in-app + socket + push)`);
+      } else {
+        console.log('📢 [Doubt Notification] ⚠️ No mentors found!');
       }
     } catch (notifError) {
-      console.error('Error sending notifications to mentors:', notifError);
+      console.error('❌ [Doubt Notification] Error:', notifError);
+      console.error('📢 [Doubt Notification] Stack:', notifError.stack);
       // Don't fail doubt creation if notifications fail
     }
 
