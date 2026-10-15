@@ -339,6 +339,26 @@ router.post('/', authenticate, writeLimiter, async (req, res) => {
   }
 });
 
+// GET /api/feed/:id - Get single post by ID (for deep linking)
+// IMPORTANT: Place BEFORE DELETE to avoid route conflicts
+router.get('/:id', authenticate, async (req, res) => {
+  try {
+    const post = await FeedPost.findById(req.params.id)
+      .populate('userId', 'name profileImage role skills')
+      .populate('comments.userId', 'name profileImage')
+      .populate('comments.replies.userId', 'name profileImage');
+
+    if (!post) {
+      return res.status(404).json({ success: false, error: { message: 'Post not found' } });
+    }
+
+    res.json({ success: true, data: { post } });
+  } catch (err) {
+    console.error('Failed to fetch post:', err);
+    res.status(500).json({ success: false, error: { message: 'Failed to fetch post' } });
+  }
+});
+
 // DELETE /api/feed/:id
 router.delete('/:id', authenticate, async (req, res) => {
   try {
@@ -795,25 +815,6 @@ router.delete('/:postId/comment/:commentId/reply/:replyId', authenticate, async 
   } catch (err) {
     console.error('Delete reply error:', err);
     res.status(500).json({ success: false, error: { message: 'Failed to delete reply' } });
-  }
-});
-
-// GET /api/feed/:id - Get single post by ID (for deep linking)
-router.get('/:id', authenticate, async (req, res) => {
-  try {
-    const post = await FeedPost.findById(req.params.id)
-      .populate('userId', 'name profileImage role skills')
-      .populate('comments.userId', 'name profileImage')
-      .populate('comments.replies.userId', 'name profileImage');
-
-    if (!post) {
-      return res.status(404).json({ success: false, error: { message: 'Post not found' } });
-    }
-
-    res.json({ success: true, data: { post } });
-  } catch (err) {
-    console.error('Failed to fetch post:', err);
-    res.status(500).json({ success: false, error: { message: 'Failed to fetch post' } });
   }
 });
 
