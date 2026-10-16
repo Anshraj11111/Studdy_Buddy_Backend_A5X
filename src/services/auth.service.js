@@ -207,8 +207,19 @@ class AuthService {
         });
 
         if (userPreReg && userPreReg.schoolPassword) {
-          // Validate against PreReg password (plain text in PreReg)
-          const isSchoolPasswordValid = await this.comparePassword(schoolPassword, userPreReg.schoolPassword);
+          // Validate against PreReg password
+          // Support both plain text (new) and bcrypt hash (legacy)
+          let isSchoolPasswordValid = false;
+          const storedPassword = userPreReg.schoolPassword;
+          
+          if (storedPassword.startsWith('$2')) {
+            // Bcrypt hash - use bcrypt compare
+            isSchoolPasswordValid = await this.comparePassword(schoolPassword, storedPassword);
+          } else {
+            // Plain text - direct comparison
+            isSchoolPasswordValid = schoolPassword === storedPassword;
+          }
+          
           if (isSchoolPasswordValid) {
             isAuthenticated = true;
             console.log(`✅ School password validated against PreReg for: ${email}`);
