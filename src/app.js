@@ -24,6 +24,7 @@ import schoolChannelRoutes from './routes/schoolChannel.routes.js';
 import paymentRoutes from './routes/payment.routes.js';
 import courseRoutes from './routes/course.routes.js';
 import referralRoutes from './routes/referral.routes.js';
+import healthRoutes from './routes/health.routes.js';
 import pushRoutes from './routes/push.routes.js';
 import lectureProgressRoutes from './routes/lectureProgress.routes.js';
 import quizRoutes from './routes/quiz.routes.js';
@@ -411,6 +412,9 @@ app.use('/api/referral', referralRoutes);
 app.use('/api/push', pushRoutes);
 app.use('/api', lectureProgressRoutes);
 app.use('/api', quizRoutes);
+
+// Health check - no rate limiting, keeps server awake
+app.use('/', healthRoutes);
 
 // 404 handler
 app.use((req, res) => {
