@@ -35,6 +35,16 @@ const roomSchema = new mongoose.Schema(
       default: 'active',
       index: true,
     },
+    lastMessage: {
+      content: { type: String, default: '' },
+      senderId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      createdAt: { type: Date, default: null },
+    },
+    unreadCount: {
+      type: Map,
+      of: Number,
+      default: {},
+    },
   },
   { timestamps: true }
 );

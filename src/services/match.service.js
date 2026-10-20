@@ -198,7 +198,7 @@ class MatchService {
           path: 'doubt2',
           populate: { path: 'userId' }
         })
-        .sort({ createdAt: -1 });
+        .sort({ 'lastMessage.createdAt': -1, createdAt: -1 });
 
       console.log('getRoomsByUser - Found rooms:', rooms.length);
       return rooms;

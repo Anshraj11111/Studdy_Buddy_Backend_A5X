@@ -98,6 +98,21 @@ export const setupChatSocket = (io) => {
         // Get latest messages (limit to 50 for performance)
         const messages = await MessageService.getLatestMessages(roomId, 50);
 
+        // Reset unread count for this user when they join the room
+        try {
+          const Room = (await import('../models/Room.js')).default;
+          const room = await Room.findById(roomId);
+          if (room && room.unreadCount) {
+            room.unreadCount.set(String(userId), 0);
+            await room.save();
+            // Notify chats page to reset badge
+            io.to(`user:${userId}`).emit('unreadUpdate', {
+              roomId,
+              unreadCount: 0,
+            });
+          }
+        } catch (e) { /* ignore */ }
+
         // Emit join event to user
         socket.emit('roomJoined', {
           success: true,
@@ -183,11 +198,34 @@ export const setupChatSocket = (io) => {
         // ── Message notification to recipient ─────────────────────────────────
         try {
           // Find recipient (the other person in the room)
-          const room = await import('../models/Room.js').then(m => m.default.findById(roomId).select('student1 student2'));
+          const Room = await import('../models/Room.js').then(m => m.default);
+          const room = await Room.findById(roomId).select('student1 student2 unreadCount');
           if (room) {
             const recipientId = String(room.student1) === String(userId)
               ? String(room.student2)
               : String(room.student1);
+
+            // Update lastMessage and unreadCount on Room
+            const currentUnread = room.unreadCount?.get(recipientId) || 0;
+            room.lastMessage = {
+              content: content.trim().substring(0, 100),
+              senderId: userId,
+              createdAt: new Date(),
+            };
+            room.unreadCount = room.unreadCount || new Map();
+            room.unreadCount.set(recipientId, currentUnread + 1);
+            await room.save();
+
+            // Emit unread count update to recipient's chats page
+            io.to(`user:${recipientId}`).emit('unreadUpdate', {
+              roomId,
+              unreadCount: currentUnread + 1,
+              lastMessage: {
+                content: content.trim().substring(0, 100),
+                senderId: userId,
+                createdAt: new Date(),
+              },
+            });
 
             // Save notification to DB
             const Notification = await import('../models/Notification.js').then(m => m.default);
