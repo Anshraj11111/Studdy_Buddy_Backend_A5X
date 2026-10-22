@@ -191,7 +191,7 @@ export const getDoubts = async (req, res) => {
     const { page = 1, limit = 10, topic, status, userId } = req.query;
 
     const pageNum = Math.max(1, parseInt(page) || 1);
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 10));
+    const limitNum = Math.min(500, Math.max(1, parseInt(limit) || 10));
 
     const filters = {};
     if (topic) filters.topic = topic;
@@ -279,7 +279,7 @@ export const searchDoubts = async (req, res) => {
     }
 
     const pageNum = Math.max(1, parseInt(page) || 1);
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 10));
+    const limitNum = Math.min(500, Math.max(1, parseInt(limit) || 10));
 
     const doubts = await doubtService.searchDoubts(keyword, {
       page: pageNum,
@@ -317,7 +317,7 @@ export const getDoubtsByTopic = async (req, res) => {
     const { page = 1, limit = 10 } = req.query;
 
     const pageNum = Math.max(1, parseInt(page) || 1);
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 10));
+    const limitNum = Math.min(500, Math.max(1, parseInt(limit) || 10));
 
     const doubts = await doubtService.getDoubtsByTopic(topic, {
       page: pageNum,
