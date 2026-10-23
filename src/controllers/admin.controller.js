@@ -32,11 +32,24 @@ export const getStats = async (req, res) => {
     try { const Doubt = await getDoubt(); totalDoubts = await Doubt.countDocuments(); } catch {}
     try { const Resource = await getResource(); totalResources = await Resource.countDocuments(); } catch {}
 
+    // Get real-time online users count from Socket.IO
+    let onlineUsersCount = 0;
+    try {
+      const io = req.app.get('io');
+      if (io) {
+        const sockets = await io.fetchSockets();
+        const onlineUserIds = new Set();
+        sockets.forEach(s => {
+          if (s.userId) onlineUserIds.add(s.userId);
+        });
+        onlineUsersCount = onlineUserIds.size;
+      }
+    } catch (e) { /* ignore */ }
+
     res.json({
       success: true,
-      data: { totalUsers, totalMentors, totalStudents, studentsWithAccess, totalDoubts, totalResources },
-    });
-  } catch (err) {
+      data: { totalUsers, totalMentors, totalStudents, studentsWithAccess, totalDoubts, totalResources, onlineUsersCount },
+    });  } catch (err) {
     res.status(500).json({ success: false, error: { message: err.message } });
   }
 };
@@ -1792,5 +1805,38 @@ export const getQuizStats = async (req, res) => {
       success: false,
       error: { message: err.message || 'Failed to fetch quiz statistics' },
     });
+  }
+};
+
+// Get list of currently online users
+export const getOnlineUsers = async (req, res) => {
+  try {
+    const io = req.app.get('io');
+    if (!io) {
+      return res.json({ success: true, data: { users: [], count: 0 } });
+    }
+
+    const sockets = await io.fetchSockets();
+    const onlineUserIds = new Set();
+    sockets.forEach(s => {
+      if (s.userId) onlineUserIds.add(s.userId);
+    });
+
+    // Fetch user details for online users
+    const onlineUsers = await User.find({
+      _id: { $in: Array.from(onlineUserIds) }
+    })
+      .select('name email role profileImage schoolName city xp')
+      .lean();
+
+    res.json({
+      success: true,
+      data: {
+        users: onlineUsers,
+        count: onlineUsers.length,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: { message: err.message } });
   }
 };
