@@ -1,7 +1,6 @@
 import express from 'express';
 import { 
   getStats, 
-  getOnlineUsers,
   getUsers, 
   toggleUserActive, 
   deleteUser,
@@ -71,7 +70,6 @@ const adminAuth = (req, res, next) => {
 router.use(adminAuth);
 
 router.get('/stats', getStats);
-router.get('/online-users', getOnlineUsers);
 router.get('/users', getUsers);
 router.put('/users/:id/toggle', toggleUserActive);
 router.put('/users/:id', updateUser);
