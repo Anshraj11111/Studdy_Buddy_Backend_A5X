@@ -237,6 +237,91 @@ export const createPost = async (req, res) => {
 
     const post = await communityService.createPost(id, req.user._id, content);
 
+    // Send notifications to all connections when post is created
+    try {
+      console.log('📢 [Community Post] Starting notification process...');
+      const Connection = (await import('../models/Connection.js')).default;
+      const Notification = (await import('../models/Notification.js')).default;
+      const { sendPushToUser } = await import('../services/webPush.service.js');
+      const io = req.app.get('io');
+
+      // Find all accepted connections (both requester and recipient sides)
+      const connections = await Connection.find({
+        $or: [
+          { requester: req.user._id, status: 'accepted' },
+          { recipient: req.user._id, status: 'accepted' },
+        ],
+      }).lean();
+
+      console.log(`📢 [Community Post] Found ${connections.length} connections`);
+
+      if (connections.length > 0) {
+        // Extract connection user IDs (exclude self)
+        const connectionUserIds = connections.map(conn => {
+          const otherUserId = String(conn.requester) === String(req.user._id) 
+            ? conn.recipient 
+            : conn.requester;
+          return otherUserId;
+        }).filter(uid => String(uid) !== String(req.user._id));
+
+        // Remove duplicates
+        const uniqueUserIds = [...new Set(connectionUserIds.map(id => String(id)))];
+        console.log(`📢 [Community Post] Notifying ${uniqueUserIds.length} unique connections`);
+
+        if (uniqueUserIds.length > 0) {
+          // Create notifications for all connections
+          const notifications = uniqueUserIds.map(userId => ({
+            recipient: userId,
+            sender: req.user._id,
+            type: 'community_post',
+            message: `${req.user.name} posted in community: "${content.length > 50 ? content.substring(0, 50) + '...' : content}"`,
+            read: false,
+          }));
+
+          const savedNotifs = await Notification.insertMany(notifications);
+          console.log(`📢 [Community Post] ✅ Created ${savedNotifs.length} in-app notifications`);
+
+          // Emit real-time Socket.IO notifications
+          uniqueUserIds.forEach(userId => {
+            const room = `user:${userId}`;
+            io.to(room).emit('notification', {
+              type: 'community_post',
+              message: `${req.user.name} posted in community`,
+              sender: {
+                _id: req.user._id,
+                name: req.user.name,
+                profileImage: req.user.profileImage,
+              },
+            });
+          });
+          console.log(`📢 [Community Post] ✅ Emitted ${uniqueUserIds.length} socket notifications`);
+
+          // Send Web Push notifications
+          console.log(`📢 [Community Post] Sending web push to ${uniqueUserIds.length} connections...`);
+          const pushPromises = uniqueUserIds.map(userId =>
+            sendPushToUser(String(userId), {
+              title: '📝 New Post from Connection',
+              body: `${req.user.name}: ${content.length > 80 ? content.substring(0, 80) + '...' : content}`,
+              icon: req.user.profileImage || '/icons/icon-192x192.png',
+              url: '/community',
+              type: 'community_post',
+            })
+          );
+          const pushResults = await Promise.allSettled(pushPromises);
+          const pushSuccess = pushResults.filter(r => r.status === 'fulfilled').length;
+          console.log(`📢 [Community Post] ✅ Web push: ${pushSuccess} success, ${pushResults.length - pushSuccess} failed`);
+
+          console.log(`✅ Sent community post notifications to ${uniqueUserIds.length} connections (in-app + socket + push)`);
+        }
+      } else {
+        console.log('📢 [Community Post] ⚠️ No connections found!');
+      }
+    } catch (notifError) {
+      console.error('❌ [Community Post] Notification error:', notifError);
+      console.error('📢 [Community Post] Stack:', notifError.stack);
+      // Don't fail post creation if notifications fail
+    }
+
     res.status(201).json({
       success: true,
       data: {
