@@ -1174,12 +1174,26 @@ export const deleteLecture = async (req, res) => {
 export const getAllPosts = async (req, res) => {
   try {
     const FeedPost = (await import('../models/FeedPost.js')).default;
-    const { page = 1, limit = 20, search = '' } = req.query;
+    const { page = 1, limit = 20, search = '', startDate, endDate } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
-    const filter = search
-      ? { content: { $regex: escapeRegex(search), $options: 'i' } }
-      : {};
+    const filter = {};
+    
+    // Search filter
+    if (search) {
+      filter.content = { $regex: escapeRegex(search), $options: 'i' };
+    }
+
+    // Date range filter
+    if (startDate || endDate) {
+      filter.createdAt = {};
+      if (startDate) {
+        filter.createdAt.$gte = new Date(startDate);
+      }
+      if (endDate) {
+        filter.createdAt.$lte = new Date(endDate);
+      }
+    }
 
     const [posts, total] = await Promise.all([
       FeedPost.find(filter)
